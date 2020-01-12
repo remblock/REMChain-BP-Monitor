@@ -2,7 +2,7 @@
 #!/bin/bash
 
 #****************************************************************************************************#
-#                                              BP MONITOR                                            #
+#                                              BP-MONITOR                                            #
 #****************************************************************************************************#
 
 #----------------------------------------------------------------------------------------------------#
@@ -340,3 +340,34 @@ then
 fi
 
 send_warnings
+
+#----------------------------------------------------------------------------------------------------#
+# CREATE BP-MONITOR CONFIG FILE                                                                      #
+#----------------------------------------------------------------------------------------------------#
+
+if ! grep 'bpm_temp_dir' "$bp_monitor_config_path" &>/dev/null
+then
+cat << 'DOC' >> "$bp_monitor_config_path"
+bpm_cron_cmd="/root/remblock/autobot/bp-monitor"
+bpm_temp_dir="/root/remblock/autobot/bp-monitor_temp"
+bpm_remnode_log="/root/remnode.log"
+bpm_warning_alert_threshold=3
+bpm_check_produce_minutes=3
+bpm_max_queued_msg_lines=50
+bpm_check_log_minutes=3
+bpm_check_block_minutes=3
+bpm_check_peers_minutes=3
+bpm_ram_usage_threshold=80
+bpm_disk_space_threshold=80
+bpm_check_producer=true
+bpm_check_log=false
+bpm_check_info=false
+bpm_check_blocks=false
+bpm_check_irr_blocks=false
+bpm_check_peers=false
+bpm_check_server=true
+DOC
+#Run the script a first time so it create the crontab line
+bash $bp_monitor_script_path &>/dev/null
+fi
+}
