@@ -2,7 +2,7 @@
 #!/bin/bash
 
 #****************************************************************************************************#
-#                                         PRODUCER MONITOR                                           #
+#                                              BP MONITOR                                            #
 #****************************************************************************************************#
 
 #----------------------------------------------------------------------------------------------------#
@@ -19,14 +19,14 @@ fi
 # CRON LINE WILL BE CREATED FOR THE BP MONITORING SCRIPT                                             #
 #----------------------------------------------------------------------------------------------------#
 
-bp_mon_cron_line="* * * * * /root/remblock/monitor/bpmonitor.sh"
+bp_mon_cron_line="* * * * * /root/remblock/bp-monitor/bp-monitor"
 
 #----------------------------------------------------------------------------------------------------#
 # START AND STOP SERVER COMMANDS FILES PATH                                                          #
 #----------------------------------------------------------------------------------------------------#
 
-start_server_commands_path="/root/remblock/monitor/start_server_commands.sh"
-stop_server_commands_path="/root/remblock/monitor/stop_server_commands.sh"
+start_server_commands_path="/root/remblock/bp-monitor/start_server_commands"
+stop_server_commands_path="/root/remblock/bp-monitor/stop_server_commands"
 service_definition_path="/etc/systemd/system/autobot.service"
 
 #----------------------------------------------------------------------------------------------------#
@@ -292,7 +292,7 @@ function check_disk_and_ram(){
   max_disk="$(echo $bpm_disk_space_threshold | tr -d '%' )"
   if (( ram_used_perc >= max_ram ))
   then
-    add_message_to_queue "$owneraccountname ram usage is over the specified threshold amount."
+    add_message_to_queue "$accountname ram usage is over the specified threshold amount."
   fi
   if (( disk_used_perc >= max_disk ))
   then
