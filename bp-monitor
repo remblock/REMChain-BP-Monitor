@@ -18,7 +18,7 @@ fi
 # CRON LINE WILL BE CREATED FOR THE BP MONITORING SCRIPT                                             #
 #----------------------------------------------------------------------------------------------------#
 
-bp_mon_cron_line="* * * * * /root/remblock/bp-monitor/bp-monitor"
+bp_monitor_cron_line="* * * * * /root/remblock/bp-monitor/bp-monitor"
 
 #----------------------------------------------------------------------------------------------------#
 # START AND STOP SERVER COMMANDS FILES PATH                                                          #
@@ -68,7 +68,7 @@ ExecStop=$stop_server_commands_path
 [Install]
 WantedBy=multi-user.target
 DOC
-systemctl enable autobot &> /dev/null
+systemctl enable bp-monitor &> /dev/null
 fi
 }
 
@@ -83,7 +83,7 @@ PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 # LOAD CONFIGURATION VARIABLES AND VALUES                                                            #
 #----------------------------------------------------------------------------------------------------#
 
-source "/root/remblock/monitor/config" &>/dev/null
+source "/root/remblock/bp-monitor/config" &>/dev/null
 now_epoch="$(date +%s)"
 now_date="$(date +%d-%m-%Y)"
 accountname="$accountname"
@@ -92,18 +92,18 @@ accountname="$accountname"
 # INSTALL CRONTAB LINE IF IT DOESN'T EXIST
 #----------------------------------------------------------------------------------------------------#
 
-if [ ! -z "$bpm_cron_cmd" ] && ! crontab -u root -l | grep -v '^ *#' | grep "$bpm_cron_cmd" &>/dev/null
+if [ ! -z "$bp_monitor_cron_cmd" ] && ! crontab -u root -l | grep -v '^ *#' | grep "$bp_monitor_cron_cmd" &>/dev/null
 then
-  (crontab -u root -l ; echo "*/1 * * * * $bpm_cron_cmd") | crontab -u root -
+  (crontab -u root -l ; echo "*/1 * * * * $bp_monitor_cron_cmd") | crontab -u root -
 fi
 
 #----------------------------------------------------------------------------------------------------#
 # CREATE BP MONITOR FOLDER FOR TEMP INFORMATION
 #----------------------------------------------------------------------------------------------------#
 
-if [ ! -z "$bpm_temp_dir" ] && [ ! -d "$bpm_temp_dir" ]
+if [ ! -z "$bp_monitor_temp_dir" ] && [ ! -d "$bp_monitor_temp_dir" ]
 then
-  mkdir "$bpm_temp_dir"
+  mkdir "$bp_monitor_temp_dir"
 fi
 
 #****************************************************************************************************#
@@ -114,13 +114,13 @@ fi
 
 function add_message_to_queue(){
   #If the log is at maximum capacity, delete exceding lines
-  if [ -f "$bpm_temp_dir/msg_queue.txt" ] && (( $(wc -l "$bpm_temp_dir/msg_queue.txt" | awk '{print $1}') >= bpm_max_queued_msg_lines ))
+  if [ -f "$bp_monitor_temp_dir/msg_queue.txt" ] && (( $(wc -l "$bp_monitor_temp_dir/msg_queue.txt" | awk '{print $1}') >= bp_monitor_max_queued_msg_lines ))
   then
-    echo "$(tail -$((bpm_max_queued_msg_lines -1)) $bpm_temp_dir/msg_queue.txt)" > $bpm_temp_dir/msg_queue.txt
+    echo "$(tail -$((bp_monitor_max_queued_msg_lines -1)) $bp_monitor_temp_dir/msg_queue.txt)" > $bp_monitor_temp_dir/msg_queue.txt
   fi
   if ! line_repeated "$1"
   then
-    echo -e "$1\n" >> "$bpm_temp_dir/msg_queue.txt"
+    echo -e "$1\n" >> "$bp_monitor_temp_dir/msg_queue.txt"
   fi
 }
 
@@ -129,7 +129,7 @@ function add_message_to_queue(){
 #****************************************************************************************************#
 
 function line_repeated(){
-  if grep "$1" "$bpm_temp_dir/msg_queue.txt" &>/dev/null
+  if grep "$1" "$bp_monitor_temp_dir/msg_queue.txt" &>/dev/null
   then
     return 0
   else
@@ -144,40 +144,43 @@ function line_repeated(){
 # It receives only the base of the line befores the numbers curresponding to time
 
 function remove_lines_repeated_time(){
-  sed -i "/^$1/d" "$bpm_temp_dir/msg_queue.txt"
+  sed -i "/^$1/d" "$bp_monitor_temp_dir/msg_queue.txt"
 }
 
 #Remove 2 consecutive empty lines before sending the message
+
 function remove_empty_lines(){
-  sed -i '/^$/{N;/^\n$/d;}' "$bpm_temp_dir/msg_queue.txt"
+  sed -i '/^$/{N;/^\n$/d;}' "$bp_monitor_temp_dir/msg_queue.txt"
   #if the first line is empty, delete it
-  if ! [[ "$(head -1 $bpm_temp_dir/msg_queue.txt)" =~ [a-zA-Z0-9] ]]
+  if ! [[ "$(head -1 $bp_monitor_temp_dir/msg_queue.txt)" =~ [a-zA-Z0-9] ]]
   then
-    sed -i '1d' "$bpm_temp_dir/msg_queue.txt"
+    sed -i '1d' "$bp_monitor_temp_dir/msg_queue.txt"
   fi
 }
 
 #Send the queued messages to telegram and empty the queue
+
 function send_telegram_messages(){
   if [ ! -z "$telegram_token" ] && [ ! -z "$telegram_chatid" ]
   then
     remove_empty_lines
-    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$(echo -e "BP Warning Alert\n--------------------------------------";cat $bpm_temp_dir/msg_queue.txt)" &>/dev/null
+    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$(echo -e "BP Warning Alert\n--------------------------------------";cat $bp_monitor_temp_dir/msg_queue.txt)" &>/dev/null
     #clean the msg queue file
-    > $bpm_temp_dir/msg_queue.txt
-    echo $now_epoch > "$bpm_temp_dir/last_send_message_epoch.txt"
+    > $bp_monitor_temp_dir/msg_queue.txt
+    echo $now_epoch > "$bp_monitor_temp_dir/last_send_message_epoch.txt"
   fi
 }
 
 #Check warning threshold and send message
+
 function send_warnings(){
-  if [ ! -f "$bpm_temp_dir/last_send_message_epoch.txt" ]
+  if [ ! -f "$bp_monitor_temp_dir/last_send_message_epoch.txt" ]
   then
-    echo $now_epoch > "$bpm_temp_dir/last_send_message_epoch.txt"
+    echo $now_epoch > "$bp_monitor_temp_dir/last_send_message_epoch.txt"
   else
     config_minutes_in_seconds="$((bpm_warning_alert_threshold * 60))"
-    last_msg_epoch=$(cat "$bpm_temp_dir/last_send_message_epoch.txt")
-    if (( (now_epoch - last_msg_epoch) >= config_minutes_in_seconds )) && (( $(wc -l "$bpm_temp_dir/msg_queue.txt" | awk '{print $1}') > 1 ))
+    last_msg_epoch=$(cat "$bp_monitor_temp_dir/last_send_message_epoch.txt")
+    if (( (now_epoch - last_msg_epoch) >= config_minutes_in_seconds )) && (( $(wc -l "$bp_monitor_temp_dir/msg_queue.txt" | awk '{print $1}') > 1 ))
     then
       send_telegram_messages
     fi
@@ -185,16 +188,18 @@ function send_warnings(){
 }
 
 #Translate the time format from the remnode log to epoch time
+
 function remnodelogtime_to_epoch(){
   temp_date="$( echo $1 | awk -F '.' '{ print $1}' | tr '-' '/' | tr 'T' ' ')"
   echo $(date "+%s" -d "$temp_date")
 }
 
 #Function that checks if whether the node has actual produced a block within the past configured max minutes.
+
 function check_produce_minutes(){
-  last_block_date=$(grep -i "signed by $accountname" $bpm_remnode_log | sed -n '$p' | awk '{print $2}')
+  last_block_date=$(grep -i "signed by $accountname" $bp_monitor_remnode_log | sed -n '$p' | awk '{print $2}')
   last_block_epoch=$(remnodelogtime_to_epoch "$last_block_date")
-  config_minutes_in_seconds="$((bpm_check_produce_minutes * 60))"
+  config_minutes_in_seconds="$((bp_monitor_check_produce_minutes * 60))"
   if (( (now_epoch - last_block_epoch) >= config_minutes_in_seconds ))
   then
     remove_lines_repeated_time "$accountname last produced a block"
@@ -203,9 +208,10 @@ function check_produce_minutes(){
 }
 
 #Function that checks whether the remnode.log file has been modified within the past configured max minutes
+
 function check_log_minutes(){
-  last_write_epoch=$(date +%s -r "$bpm_remnode_log")
-  config_minutes_in_seconds="$(( bpm_check_log_minutes * 60))"
+  last_write_epoch=$(date +%s -r "$bp_monitor_remnode_log")
+  config_minutes_in_seconds="$(( bp_monitor_check_log_minutes * 60))"
   if (( (now_epoch - last_write_epoch) >= config_minutes_in_seconds ))
   then
     remove_lines_repeated_time "$accountname log file was last modified"
@@ -214,6 +220,7 @@ function check_log_minutes(){
 }
 
 #Function that checks the condition of the remnode chain
+
 function check_remnode_chain(){
   if ! timeout 10s remcli get info 2>&1 | grep server_version &>/dev/null
   then
@@ -222,6 +229,7 @@ function check_remnode_chain(){
 }
 
 #Function that checks gap between head block (head_block_num) and last irreversible block (last_irreversible_block_num) to see if it has been more than the configured minutes
+
 function check_block_minutes(){
   if ! timeout 10s remcli get info 2>&1 | grep server_version &>/dev/null
   then
@@ -230,11 +238,11 @@ function check_block_minutes(){
   fi
   last_block_id="$(remcli get info | grep -w 'head_block_num' | awk '{print $2}' | tr -d ',')"
   last_irr_block_id="$(remcli get info | grep -w 'last_irreversible_block_num' | awk '{print $2}' | tr -d ',')"
-  last_block_date=$(grep -i "#$last_block_id" $bpm_remnode_log | sed -n '$p' | awk '{print $2}')
-  last_irr_block_date=$(grep -i "#$last_irr_block_id" $bpm_remnode_log | sed -n '$p' | awk '{print $2}')
+  last_block_date=$(grep -i "#$last_block_id" $bp_monitor_remnode_log | sed -n '$p' | awk '{print $2}')
+  last_irr_block_date=$(grep -i "#$last_irr_block_id" $bp_monitor_remnode_log | sed -n '$p' | awk '{print $2}')
   last_block_epoch=$(remnodelogtime_to_epoch "$last_block_date")
   last_irr_block_epoch=$(remnodelogtime_to_epoch "$last_irr_block_date")
-  config_minutes_in_seconds="$((bpm_check_block_minutes * 60))"
+  config_minutes_in_seconds="$((bp_monitor_check_block_minutes * 60))"
   if (( ( last_block_epoch - last_irr_block_epoch ) >= config_minutes_in_seconds ))
   then
     remove_lines_repeated_time "$accountname current block is"
@@ -243,30 +251,32 @@ function check_block_minutes(){
 }
 
 #Function that checks if the last irreversible block has not advanced.
+
 function check_last_iblock(){
   if ! timeout 10s remcli get info 2>&1 | grep server_version &>/dev/null
   then
     add_message_to_queue "$accountname failed to receive a response from \"remcli get info\""
     return
   fi
-  if [ ! -f "$bpm_temp_dir/last_iblock.txt" ]
+  if [ ! -f "$bp_monitor_temp_dir/last_iblock.txt" ]
   then
     last_irr_block_id="$(remcli get info | grep -w 'last_irreversible_block_num' | awk '{print $2}' | tr -d ',')"
-    echo "$last_irr_block_id" > "$bpm_temp_dir/last_iblock.txt"
+    echo "$last_irr_block_id" > "$bp_monitor_temp_dir/last_iblock.txt"
   else
-    last_block_id=$(cat "$bpm_temp_dir/last_iblock.txt")
+    last_block_id=$(cat "$bp_monitor_temp_dir/last_iblock.txt")
     last_irr_block_id="$(remcli get info | grep -w 'last_irreversible_block_num' | awk '{print $2}' | tr -d ',')"
     if [ "$last_block_id" == "$last_irr_block_id" ]
     then
       remove_lines_repeated_time "$accountname last irreversible block is stuck on"
       add_message_to_queue "$accountname last irreversible block is stuck on ${last_irr_block_id}."
     else
-      echo "$last_irr_block_id" > "$bpm_temp_dir/last_iblock.txt"
+      echo "$last_irr_block_id" > "$bp_monitor_temp_dir/last_iblock.txt"
     fi
   fi
 }
 
 #Function that tests the "remcli net peers" command for the last handshake time, if the peer time is older than the configured minutes
+
 function check_net_peers(){
   if ! timeout 10 remcli net peers | grep head_id &>/dev/null
   then
@@ -276,7 +286,7 @@ function check_net_peers(){
   last_hand_shake_time_ns="$(remcli net peers | grep time | sed -n '1p' | awk '{print $2}' | tr -d '",')"
   #removing nanoseconds for calculations
   last_hand_shake_epoch="${last_hand_shake_time_ns:-9}"
-  config_minutes_in_seconds="$((bpm_check_peers_minutes * 60))"
+  config_minutes_in_seconds="$((bp_monitor_check_peers_minutes * 60))"
   if (( ( now_epoch - last_hand_shake_epoch ) >= config_minutes_in_seconds ))
   then
     add_message_to_queue "$accountname peer handshake never took place."
@@ -284,11 +294,12 @@ function check_net_peers(){
 }
 
 #Send alerts if disk or ram exceeds the threshold
+
 function check_disk_and_ram(){
   ram_used_perc="$(free | grep Mem | awk '{print $3/$2 * 100.0}' | awk -F '.' '{print $1}')"
-  max_ram="$(echo $bpm_ram_usage_threshold | tr -d '%' )"
+  max_ram="$(echo $bp_monitor_ram_usage_threshold | tr -d '%' )"
   disk_used_perc="$(df -h | grep -w '/' | awk '{print $5}' | tr -d '%')"
-  max_disk="$(echo $bpm_disk_space_threshold | tr -d '%' )"
+  max_disk="$(echo $bp_monitor_disk_space_threshold | tr -d '%' )"
   if (( ram_used_perc >= max_ram ))
   then
     add_message_to_queue "$accountname ram usage is over the specified threshold amount."
@@ -303,37 +314,37 @@ function check_disk_and_ram(){
 #                                       MAIN PROGRAM FUNCTIONS                                       #
 #****************************************************************************************************#
 
-if [ "$(echo $bpm_check_producer | tr '[:upper:]' '[:lower:]' )" == "true" ]
+if [ "$(echo $bp_monitor_check_producer | tr '[:upper:]' '[:lower:]' )" == "true" ]
 then
   check_produce_minutes
 fi
 
-if [ "$(echo $bpm_check_log | tr '[:upper:]' '[:lower:]' )" == "true" ]
+if [ "$(echo $bp_monitor_check_log | tr '[:upper:]' '[:lower:]' )" == "true" ]
 then
   check_log_minutes
 fi
 
-if [ "$(echo $bpm_check_info | tr '[:upper:]' '[:lower:]' )" == "true" ]
+if [ "$(echo $bp_monitor_check_info | tr '[:upper:]' '[:lower:]' )" == "true" ]
 then
   check_remnode_chain
 fi
 
-if [ "$(echo $bpm_check_blocks | tr '[:upper:]' '[:lower:]' )" == "true" ]
+if [ "$(echo $bp_monitor_check_blocks | tr '[:upper:]' '[:lower:]' )" == "true" ]
 then
   check_block_minutes
 fi
 
-if [ "$(echo $bpm_check_irr_blocks | tr '[:upper:]' '[:lower:]' )" == "true" ]
+if [ "$(echo $bp_monitor_check_irr_blocks | tr '[:upper:]' '[:lower:]' )" == "true" ]
 then
   check_last_iblock
 fi
 
-if [ "$(echo $bpm_check_peers | tr '[:upper:]' '[:lower:]' )" == "true" ]
+if [ "$(echo $bp_monitor_check_peers | tr '[:upper:]' '[:lower:]' )" == "true" ]
 then
   check_net_peers
 fi
 
-if [ "$(echo $bpm_check_server | tr '[:upper:]' '[:lower:]' )" == "true" ]
+if [ "$(echo $bp_monitor_check_server | tr '[:upper:]' '[:lower:]' )" == "true" ]
 then
   check_disk_and_ram
 fi
@@ -344,27 +355,27 @@ send_warnings
 # CREATE BP-MONITOR CONFIG FILE                                                                      #
 #----------------------------------------------------------------------------------------------------#
 
-if ! grep 'bpm_temp_dir' "$bp_monitor_config_path" &>/dev/null
+if ! grep 'bp_monitor_temp_dir' "$bp_monitor_config_path" &>/dev/null
 then
 cat << 'DOC' >> "$bp_monitor_config_path"
-bpm_cron_cmd="/root/remblock/autobot/bp-monitor"
-bpm_temp_dir="/root/remblock/autobot/bp-monitor_temp"
-bpm_remnode_log="/root/remnode.log"
-bpm_warning_alert_threshold=3
-bpm_check_produce_minutes=3
-bpm_max_queued_msg_lines=50
-bpm_check_log_minutes=3
-bpm_check_block_minutes=3
-bpm_check_peers_minutes=3
-bpm_ram_usage_threshold=80
-bpm_disk_space_threshold=80
-bpm_check_producer=true
-bpm_check_log=false
-bpm_check_info=false
-bpm_check_blocks=false
-bpm_check_irr_blocks=false
-bpm_check_peers=false
-bpm_check_server=true
+bp_monitor_cron_cmd="/root/remblock/autobot/bp-monitor"
+bp_monitor_temp_dir="/root/remblock/autobot/bp-monitor_temp"
+bp_monitor_remnode_log="/root/remnode.log"
+bp_monitor_warning_alert_threshold=3
+bp_monitor_check_produce_minutes=3
+bp_monitor_max_queued_msg_lines=50
+bp_monitor_check_log_minutes=3
+bp_monitor_check_block_minutes=3
+bp_monitor_check_peers_minutes=3
+bp_monitor_ram_usage_threshold=80
+bp_monitor_disk_space_threshold=80
+bp_monitor_check_producer=true
+bp_monitor_check_log=false
+bp_monitor_check_info=false
+bp_monitor_check_blocks=false
+bp_monitor_check_irr_blocks=false
+bp_monitor_check_peers=false
+bp_monitor_check_server=true
 DOC
 #Run the script a first time so it create the crontab line
 bash $bp_monitor_script_path &>/dev/null
