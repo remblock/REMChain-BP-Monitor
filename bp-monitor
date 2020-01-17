@@ -86,7 +86,7 @@ PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 source "/root/remblock/bp-monitor/config" &>/dev/null
 now_epoch="$(date +%s)"
 now_date="$(date +%d-%m-%Y)"
-accountname="$accountname"
+accountname=$(cat config/config.ini | grep 'producer-name' | awk '{print $3}')
 
 #----------------------------------------------------------------------------------------------------#
 # INSTALL CRONTAB LINE IF IT DOESN'T EXIST
