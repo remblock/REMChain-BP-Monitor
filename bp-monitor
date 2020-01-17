@@ -358,6 +358,7 @@ send_warnings
 if ! grep 'bp_monitor_temp_dir' "$bp_monitor_config_path" &>/dev/null
 then
 cat << 'DOC' >> "$bp_monitor_config_path"
+accountname=$accountname
 bp_monitor_cron_cmd="/root/remblock/autobot/bp-monitor"
 bp_monitor_temp_dir="/root/remblock/autobot/bp-monitor_temp"
 bp_monitor_remnode_log="/root/remnode.log"
