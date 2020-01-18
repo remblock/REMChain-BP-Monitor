@@ -83,11 +83,32 @@ PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 # LOAD CONFIGURATION VARIABLES AND VALUES                                                            #
 #----------------------------------------------------------------------------------------------------#
 
-source "/root/remblock/bp-monitor/config" &>/dev/null
 now_epoch="$(date +%s)"
 now_date="$(date +%d-%m-%Y)"
+create_dir="/root/remblock/bp-monitor"
 bp_monitor_config_path="/root/remblock/bp-monitor/config"
 accountname=$(cat config/config.ini | grep 'producer-name' | awk '{print $3}')
+
+#----------------------------------------------------------------------------------------------------#
+# CREATE DIRECTORY IF IT DOESN'T EXIST                                                               #
+#----------------------------------------------------------------------------------------------------#
+
+if [ ! -d "$create_dir" ]
+then
+  mkdir -p "$create_dir"
+  cp -p "$0" "$create_dir"
+fi
+
+#----------------------------------------------------------------------------------------------------#
+# CREATE CONFIG FILE IF IT DOESN'T EXIST                                                             #
+#----------------------------------------------------------------------------------------------------#
+
+if [ ! -f "$bp_monitor_config_path" ]
+then
+  echo "#Configuration file for the bp-monitor script" > "$bp_monitor_config_path"
+  echo "#Make the entries as variable=value" >> "$bp_monitor_config_path"
+  echo " " >> "$bp_monitor_config_path"
+fi
 
 #----------------------------------------------------------------------------------------------------#
 # INSTALL CRONTAB LINE IF IT DOESN'T EXIST
