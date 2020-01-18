@@ -26,7 +26,7 @@ bp_monitor_cron_line="* * * * * /root/remblock/bp-monitor/bp-monitor"
 
 start_server_commands_path="/root/remblock/bp-monitor/start_server_commands"
 stop_server_commands_path="/root/remblock/bp-monitor/stop_server_commands"
-service_definition_path="/etc/systemd/system/autobot.service"
+service_definition_path="/etc/systemd/system/bp-monitor.service"
 
 #----------------------------------------------------------------------------------------------------#
 # CREATE START AND STOP SERVICES                                                                     #
@@ -85,18 +85,25 @@ PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 
 now_epoch="$(date +%s)"
 now_date="$(date +%d-%m-%Y)"
-create_dir="/root/remblock/bp-monitor"
+create_dir1="/root/remblock/bp-monitor"
+create_dir2="/root/remblock/bp-monitor/bp-monitor-temp"
 bp_monitor_config_path="/root/remblock/bp-monitor/config"
 accountname=$(cat config/config.ini | grep 'producer-name' | awk '{print $3}')
 
 #----------------------------------------------------------------------------------------------------#
-# CREATE DIRECTORY IF IT DOESN'T EXIST                                                               #
+# CREATE DIRECTORYS IF IT DOESN'T EXIST                                                              #
 #----------------------------------------------------------------------------------------------------#
 
-if [ ! -d "$create_dir" ]
+if [ ! -d "$create_dir1" ]
 then
-  mkdir -p "$create_dir"
-  cp -p "$0" "$create_dir"
+  mkdir -p "$create_dir1"
+  cp -p "$0" "$create_dir1"
+fi
+
+if [ ! -d "$create_dir2" ]
+then
+  mkdir -p "$create_dir2"
+  cp -p "$0" "$create_dir2"
 fi
 
 #----------------------------------------------------------------------------------------------------#
@@ -117,15 +124,6 @@ fi
 if [ ! -z "$bp_monitor_cron_cmd" ] && ! crontab -u root -l | grep -v '^ *#' | grep "$bp_monitor_cron_cmd" &>/dev/null
 then
   (crontab -u root -l ; echo "*/1 * * * * $bp_monitor_cron_cmd") | crontab -u root -
-fi
-
-#----------------------------------------------------------------------------------------------------#
-# CREATE BP MONITOR FOLDER FOR TEMP INFORMATION
-#----------------------------------------------------------------------------------------------------#
-
-if [ ! -z "$bp_monitor_temp_dir" ] && [ ! -d "$bp_monitor_temp_dir" ]
-then
-  mkdir "$bp_monitor_temp_dir"
 fi
 
 #****************************************************************************************************#
@@ -381,8 +379,8 @@ if ! grep 'bp_monitor_temp_dir' "$bp_monitor_config_path" &>/dev/null
 then
 cat << 'DOC' >> "$bp_monitor_config_path"
 accountname=$accountname
-bp_monitor_cron_cmd="/root/remblock/autobot/bp-monitor"
-bp_monitor_temp_dir="/root/remblock/autobot/bp-monitor_temp"
+bp_monitor_cron_cmd="/root/remblock/bp-monitor/bp-monitor"
+bp_monitor_temp_dir="/root/remblock/bp-monitor/bp-monitor-temp"
 bp_monitor_remnode_log="/root/remnode.log"
 bp_monitor_warning_alert_threshold=3
 bp_monitor_check_produce_minutes=3
