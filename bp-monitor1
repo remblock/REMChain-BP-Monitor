@@ -198,18 +198,19 @@ EOF
       then
         if [ ! -f "/root/bp_monitor_warning" ]
         then
-          telegram_message="$accountname has stopped producing blocks for $current_minutes"
+          telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
           send_message=true
           echo "1" > "/root/bp_monitor_warning"
         elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 2) && grep "1" "/root/bp_monitor_warning" ))
         then
-          telegram_message="$accountname has stopped producing blocks for $current_minutes"
+          telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
           send_message=true
           echo "2" > "/root/bp_monitor_warning"
         elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 3) && grep "2" "/root/bp_monitor_warning" ))
         then  
-          telegram_message="$accountname has stopped producing blocks for $current_minutes"
+          telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
           send_message=true
+          echo "1" > "/root/bp_monitor_warning" 
         fi
       fi
     fi
