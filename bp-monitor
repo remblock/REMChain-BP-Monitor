@@ -86,6 +86,7 @@ PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 now_epoch="$(date +%s)"
 now_date="$(date +%d-%m-%Y)"
 create_dir1="/root/remblock/bp-monitor"
+source "/root/remblock/bp-monitor/config" &>/dev/null
 create_dir2="/root/remblock/bp-monitor/bp-monitor-temp"
 bp_monitor_config_path="/root/remblock/bp-monitor/config"
 accountname=$(cat config/config.ini | grep 'producer-name' | awk '{print $3}')
