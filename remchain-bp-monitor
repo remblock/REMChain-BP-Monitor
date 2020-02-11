@@ -233,7 +233,7 @@ echo ""
 
 case "$switch" in
 
-on|On|ON) last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+on|On|ON) last_block_date=$(remcli -u https://remchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
           last_block_epoch=$(remnodelogtime_to_epoch "$last_block_date")
           current_minutes=$(( ($now_epoch - $last_block_epoch) / 60 ))
           config_minutes_in_seconds=$(( (check_last_block_minutes * 60) - 60 ))
@@ -279,4 +279,4 @@ off|Off|OFF) exit
 *) exit
    ;;
 
-esac   
+esac
