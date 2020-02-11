@@ -19,11 +19,21 @@ fi
 #----------------------------------------------------------------------------------------------------#
 
 now_epoch="$(date +%s)"
+state_file="/root/check-bp-monitor"
 create_dir="/root/remblock/bp-monitor"
 config_file="/root/remblock/bp-monitor/config"
 cron_cmd="/root/remblock/bp-monitor/bp-monitor"
 bp_monitor_script_path="/root/remblock/bp-monitor/bp-monitor"
 PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+
+#----------------------------------------------------------------------------------------------------#
+# REMOVE EXISTING CRONTAB LINE IF IT EXIST WHILE CONFIG DOESN'T                                      #
+#----------------------------------------------------------------------------------------------------#
+
+if [ ! -f "$config_file" ]
+then
+crontab -u root -l | grep -v ^# | grep -v "$cron_cmd" | crontab -u root -
+fi
 
 #----------------------------------------------------------------------------------------------------#
 # CREATE DIRECTORY IF IT DOESN'T EXIST                                                               #
@@ -33,26 +43,6 @@ if [ ! -d "$create_dir" ]
 then
   mkdir -p "$create_dir"
   cp -p "$0" "$create_dir"
-fi
-
-#----------------------------------------------------------------------------------------------------#
-# CREATE CONFIG FILE IF IT DOESN'T EXIST                                                             #
-#----------------------------------------------------------------------------------------------------#
-
-if [ ! -f "$config_file" ]
-then
-  echo "#Configuration file for the bp-monitor script" > "$config_file"
-  echo "#Make the entries as variable=value" >> "$config_file"
-  echo " " >> "$config_file"
-fi
-
-#----------------------------------------------------------------------------------------------------#
-# INSTALL CRONTAB LINE IF IT DOESN'T EXIST                                                           #
-#----------------------------------------------------------------------------------------------------#
-
-if [ ! -z "$cron_cmd" ] && ! crontab -u root -l | grep -v '^ *#' | grep "$cron_cmd" &>/dev/null
-then
-  (crontab -u root -l ; echo "*/1 * * * * $cron_cmd") | crontab -u root -
 fi
 
 #----------------------------------------------------------------------------------------------------#
@@ -86,6 +76,28 @@ function get_config_value() {
   fi
 }
 
+#----------------------------------------------------------------------------------------------------#
+# CREATE CONFIG FILE IF IT DOESN'T EXIST                                                             #
+#----------------------------------------------------------------------------------------------------#
+
+if [ ! -f "$config_file" ]
+then
+  echo "#Configuration file for the unregprod script" > "$config_file"
+  echo "#Make the entries as variable=value" >> "$config_file"
+  echo " " >> "$config_file"
+fi
+
+#----------------------------------------------------------------------------------------------------#
+# CREATES THE CHECK BP MONITOR SCRIPT IF IT DOESN'T EXIST                                            #
+#----------------------------------------------------------------------------------------------------#
+
+if [ ! -f "$state_file" ]
+then
+cat > "$state_file" << 'DOC'
+on
+DOC
+fi
+
 #****************************************************************************************************#
 #                                   GETTING POSSIBLE MISSING VALUE                                   #
 #****************************************************************************************************#
@@ -98,8 +110,23 @@ if get_config_value accountname
 then
   accountname="$global_value"
 else
-  accountname=$(cat config/config.ini | grep 'producer-name' | awk '{print $3}')
-  echo "accountname=$accountname" >> "$config_file"
+  if ! grep "^accountname" "$config_file" > /dev/null 2>&1
+  then
+    accountname=$(cat config/config.ini | grep 'producer-name' | awk '{print $3}')
+    printf -- "%s\n" "accountname=$accountname" >> "$config_file"
+  else
+    accountname=$(cat config/config.ini | grep 'producer-name' | awk '{print $3}')
+    sed -i "s/accountname=/accountname=$accountname/g" "$config_file"
+  fi
+fi
+if grep "^accountname" "$config_file" > /dev/null 2>&1
+then
+  if [ -z "$accountname" ]
+  then
+    echo ""
+    read -p "ENTER YOUR PRODUCER NAME: " -e accountname
+    sed -i "s/accountname=/accountname=$accountname/g" "$config_file"
+  fi
 fi
 
 #----------------------------------------------------------------------------------------------------#
@@ -108,21 +135,16 @@ fi
 
 if get_config_value telegram_enabled
 then
-  if [ "$global_value" = "true" ]
-  then
-    telegram_enabled=true
-  else
-    telegram_enabled=false
-  fi
-else
+  telegram_enabled="$global_value"
+elif ! grep "^telegram_enabled" "$config_file" > /dev/null 2>&1
+then
   if get_user_answer_yn "ENABLE TELEGRAM NOTIFICATIONS"
   then
     telegram_enabled=true
-    echo "telegram_enabled=true" >> "$config_file"
+    printf -- "%s\n" "telegram_enabled=$telegram_enabled" >> "$config_file"
   else
     telegram_enabled=false
-    echo "telegram_enabled=false" >> "$config_file"
-    echo ""
+    printf -- "%s\n" "telegram_enabled=$telegram_enabled" >> "$config_file"
   fi
 fi
 if $telegram_enabled
@@ -131,18 +153,27 @@ then
   then
     telegram_token="$global_value"
   else
-    echo ""
-    read -p "ENTER YOUR TELEGRAM TOKEN API: " -e telegram_token
-    echo "telegram_token=$telegram_token" >> "$config_file"
-    echo ""
+    if ! grep "^telegram_token" "$config_file" > /dev/null 2>&1
+    then
+      echo ""
+      read -p "ENTER YOUR TELEGRAM TOKEN API: " -e telegram_token
+      printf -- "%s\n" "telegram_token=$telegram_token" >> "$config_file"
+    else
+      sed -i "s/telegram_token=/telegram_token=$telegram_token/g" "$config_file"
+    fi
   fi
   if get_config_value telegram_chatid
   then
     telegram_chatid="$global_value"
   else
-    read -p "ENTER YOUR TELEGRAM CHAT ID: " -e telegram_chatid
-    echo "telegram_chatid=$telegram_chatid" >> "$config_file"
-    echo ""
+    if ! grep "^telegram_chatid" "$config_file" > /dev/null 2>&1
+    then
+      echo ""
+      read -p "ENTER YOUR TELEGRAM CHAT ID: " -e telegram_chatid
+      printf -- "%s\n" "telegram_chatid=$telegram_chatid" >> "$config_file"
+    else
+      sed -i "s/telegram_token=/telegram_token=$telegram_token/g" "$config_file" 
+    fi
   fi
 fi
 
@@ -154,9 +185,16 @@ if get_config_value check_last_block_minutes
 then
   check_last_block_minutes="$global_value"
 else
-  read -p "ENTER MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e check_last_block_minutes
-  echo "check_last_block_minutes=$check_last_block_minutes" >> "$config_file"
-  echo ""
+  if ! grep "^check_last_block_minutes" "$config_file" > /dev/null 2>&1
+  then
+    echo ""
+    read -p "ENTER MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e check_last_block_minutes
+    echo ""
+    printf -- "%s\n" "check_last_block_minutes=$check_last_block_minutes" >> "$config_file"
+  else
+    check_last_block_minutes=6
+    sed -i "s/check_last_block_minutes=/check_last_block_minutes=$check_last_block_minutes/g" "$config_file"
+  fi
 fi
 
 #****************************************************************************************************#
@@ -164,10 +202,13 @@ fi
 #****************************************************************************************************#
 
 #----------------------------------------------------------------------------------------------------#
-# SET TELEGRAM SEND COMMAND TO FALSE                                                                 #
+# INSTALL CRONTAB LINE IF IT DOESN'T EXIST                                                           #
 #----------------------------------------------------------------------------------------------------#
 
-send_message=false
+if [ ! -z "$cron_cmd" ] && ! crontab -u root -l | grep -v '^ *#' | grep "$cron_cmd" &>/dev/null
+then
+  (crontab -u root -l ; echo "*/1 * * * * $cron_cmd") | crontab -u root -
+fi
 
 #----------------------------------------------------------------------------------------------------#
 # TRANSLATE THE TIME FORMAT FROM REMCLI FORMATE TO EPOCH TIME                                        #
@@ -182,45 +223,44 @@ function remnodelogtime_to_epoch() {
 # MAIN PART OF THE SCRIPT                                                                            #
 #----------------------------------------------------------------------------------------------------#
 
-if [ ! -f "/root/check_bp_monitor" ]
-then
-  cat << EOF > "/root/check_bp_monitor"
-true
-EOF
-  else
-    if grep "true" "/root/check_bp_monitor"
-    then
-      last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
-      last_block_epoch=$(remnodelogtime_to_epoch "$last_block_date")
-      current_minutes=$(( ($now_epoch - $last_block_epoch) / 60 ))
-      config_minutes_in_seconds=$(( (check_last_block_minutes * 60) - 60 ))
-      if (( ($now_epoch - $last_block_epoch) >= $config_minutes_in_seconds ))
-      then
-        if [ ! -f "/root/bp_monitor_warning" ]
-        then
-          telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
-          send_message=true
-          echo "1" > "/root/bp_monitor_warning"
-        elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 2) && grep "1" "/root/bp_monitor_warning" ))
-        then
-          telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
-          send_message=true
-          echo "2" > "/root/bp_monitor_warning"
-        elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 3) && grep "2" "/root/bp_monitor_warning" ))
-        then  
-          telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
-          send_message=true
-          echo "1" > "/root/bp_monitor_warning" 
-        fi
-      fi
-    fi
-  fi
+switch=$(cat "$state_file")
 
-#----------------------------------------------------------------------------------------------------#
-# SEND ALERT NOTIFICATIONS TO TELEGRAM BOT (IF THERE'S SOMETHING TO SEND)                            #
-#----------------------------------------------------------------------------------------------------#
+echo "======================================================================================"
+echo "BP-Monitor script is '$switch', to disable script set file '$state_file' to 'off'"
+echo "======================================================================================"
+echo ""
 
-if $send_message
-then
-  curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
-fi
+case "$switch" in
+
+on|On|ON) last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+          last_block_epoch=$(remnodelogtime_to_epoch "$last_block_date")
+          current_minutes=$(( ($now_epoch - $last_block_epoch) / 60 ))
+          config_minutes_in_seconds=$(( (check_last_block_minutes * 60) - 60 ))
+          if (( ($now_epoch - $last_block_epoch) >= $config_minutes_in_seconds ))
+          then
+            if [ ! -f "/root/bp_monitor_warning" ]
+            then
+              telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
+              curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
+              echo "1" > "/root/bp_monitor_warning"
+            elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 2) && grep "1" "/root/bp_monitor_warning" ))
+            then
+              telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
+              curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
+              echo "2" > "/root/bp_monitor_warning"
+            elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 3) && grep "2" "/root/bp_monitor_warning" ))
+            then  
+              telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
+              curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
+              echo "1" > "/root/bp_monitor_warning" 
+            fi
+          fi
+        ;;
+
+off|Off|OFF) exit
+             ;;
+
+*) exit
+   ;;
+
+esac       
