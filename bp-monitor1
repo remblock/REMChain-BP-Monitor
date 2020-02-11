@@ -172,7 +172,7 @@ then
       read -p "ENTER YOUR TELEGRAM CHAT ID: " -e telegram_chatid
       printf -- "%s\n" "telegram_chatid=$telegram_chatid" >> "$config_file"
     else
-      sed -i "s/telegram_token=/telegram_token=$telegram_token/g" "$config_file" 
+      sed -i "s/telegram_token=/telegram_token=$telegram_token/g" "$config_file"
     fi
   fi
 fi
@@ -249,25 +249,25 @@ on|On|ON) last_block_date=$(remcli -u https://testchain.remme.io get table rem r
               curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
               echo "2" > "/root/bp_monitor_warning"
             elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 3) && grep "2" "/root/bp_monitor_warning" ))
-            then  
+            then
               telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
               curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
               echo "3" > "/root/bp_monitor_warning" 
             elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 4) && grep "3" "/root/bp_monitor_warning" ))
-            then  
+            then
               telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
               curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
               echo "4" > "/root/bp_monitor_warning" 
             elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 5) && grep "4" "/root/bp_monitor_warning" ))
-            then  
+            then
               telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
               curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
               echo "5" > "/root/bp_monitor_warning" 
             elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 6) && grep "5" "/root/bp_monitor_warning" ))
-            then  
+            then
               telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
               curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
-              echo "6" > "/root/bp_monitor_warning"               
+              echo "6" > "/root/bp_monitor_warning"
             fi
           fi
         ;;
@@ -278,4 +278,4 @@ off|Off|OFF) exit
 *) exit
    ;;
 
-esac       
+esac   
