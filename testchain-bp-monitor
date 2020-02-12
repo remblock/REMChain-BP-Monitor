@@ -241,7 +241,7 @@ on|On|ON) last_block_date=$(remcli -u https://testchain.remme.io get table rem r
 
                 telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
                 curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
-                sleep $check_last_block_minutes
+                sleep $config_minutes_in_seconds
 
           done
         ;;
