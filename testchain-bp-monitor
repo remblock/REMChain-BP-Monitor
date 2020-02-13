@@ -224,6 +224,7 @@ function remnodelogtime_to_epoch() {
 #----------------------------------------------------------------------------------------------------#
 
 switch=$(cat "$state_file")
+status=`ps -efww | grep -w "testchain-bp-monitor" | grep -v grep | grep -v $$ | awk '{ print $2 }'`
 
 echo "======================================================================================="
 echo "BP-Monitor script is '$switch', to disable script set file '$state_file' to 'off'"
@@ -232,7 +233,8 @@ echo ""
 
 case "$switch" in
 
-on|On|ON) last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+on|On|ON) if [ -z "$status" ]; then
+          last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
           last_block_epoch=$(remnodelogtime_to_epoch "$last_block_date")
           current_minutes=$(( ($now_epoch - $last_block_epoch) / 60 ))
           config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
@@ -244,6 +246,7 @@ on|On|ON) last_block_date=$(remcli -u https://testchain.remme.io get table rem r
                 sleep $config_minutes_in_seconds
 
           done
+          fi
         ;;
 
 off|Off|OFF) exit
