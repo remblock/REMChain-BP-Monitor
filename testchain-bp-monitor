@@ -234,17 +234,15 @@ echo ""
 case "$switch" in
 
 on|On|ON) if [ -z "$status" ]; then
-          last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
-          last_block_epoch=$(remnodelogtime_to_epoch "$last_block_date")
-          current_minutes=$(( ($now_epoch - $last_block_epoch) / 60 ))
-          config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
           while (( ($now_epoch - $last_block_epoch) >= $config_minutes_in_seconds ))
           do
-
+                last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+                last_block_epoch=$(remnodelogtime_to_epoch "$last_block_date")
+                current_minutes=$(( ($now_epoch - $last_block_epoch) / 60 ))
+                config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
                 telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
                 curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
                 sleep $config_minutes_in_seconds
-
           done
           fi
         ;;
