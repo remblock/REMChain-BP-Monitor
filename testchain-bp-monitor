@@ -18,10 +18,16 @@ fi
 # CONFIGURATION VARIABLES                                                                            #
 #----------------------------------------------------------------------------------------------------#
 
-now_epoch="$(date +%s)"
+datenow=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+datenow_s=$(date -d $now +%s)
+datenow_n=$(date -d $now +%s%N)
+
+max_queued_msg_lines="50"
+log_file="/root/remnode.log"
 state_file="/root/check-bp-monitor"
 create_dir="/root/remblock/bp-monitor"
 config_file="/root/remblock/bp-monitor/config"
+temp_dir="/root/remblock/bp-monitor/bp-monitor-temp"
 cron_cmd="/root/remblock/bp-monitor/testchain-bp-monitor"
 PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 
@@ -83,6 +89,14 @@ if [ ! -f "$config_file" ]
 then
   echo "#Configuration file for the unregprod script" > "$config_file"
   echo "#Make the entries as variable=value" >> "$config_file"
+  echo " " >> "$config_file"
+  echo "check_info=false" >> "$config_file"
+  echo "check_server=true" >> "$config_file"
+  echo "check_producer=true" >> "$config_file"
+  echo "ram_usage_threshold=80" >> "$config_file"
+  echo "disk_space_threshold=80" >> "$config_file"    
+  echo "check_produce_minutes=3" >> "$config_file"
+  echo "warning_alert_threshold=3" >> "$config_file"
   echo " " >> "$config_file"
 fi
 
@@ -210,6 +224,68 @@ then
   (crontab -u root -l ; echo "*/1 * * * * $cron_cmd") | crontab -u root -
 fi
 
+#****************************************************************************************************#
+# REMOVE OLD LINES THAT ONLY CHANGE IN MINUTES DISPLAYED                                             #
+#****************************************************************************************************#
+
+# It receives only the base of the line befores the numbers curresponding to time
+
+function remove_lines_repeated_time(){
+  sed -i "/^$1/d" "$temp_dir/msg_queue.txt"
+}
+
+#Remove 2 consecutive empty lines before sending the message
+
+function remove_empty_lines(){
+  sed -i '/^$/{N;/^\n$/d;}' "$temp_dir/msg_queue.txt"
+  #if the first line is empty, delete it
+  if ! [[ "$(head -1 $temp_dir/msg_queue.txt)" =~ [a-zA-Z0-9] ]]
+  then
+    sed -i '1d' "$temp_dir/msg_queue.txt"
+  fi
+}
+
+#Send the queued messages to telegram and empty the queue
+
+function send_telegram_messages(){
+  if [ ! -z "$telegram_token" ] && [ ! -z "$telegram_chatid" ]
+  then
+    remove_empty_lines
+    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$(echo -e "BP Warning Alert\n--------------------------------------";cat $temp_dir/msg_queue.txt)" &>/dev/null
+    > $temp_dir/msg_queue.txt
+    echo $datenow > "$temp_dir/last_send_message_epoch.txt"
+  fi
+}
+
+function check_disk_and_ram(){
+  ram_used_perc="$(free | grep Mem | awk '{print $3/$2 * 100.0}' | awk -F '.' '{print $1}')"
+  max_ram="$(echo $ram_usage_threshold | tr -d '%' )"
+  disk_used_perc="$(df -h | grep -w '/' | awk '{print $5}' | tr -d '%')"
+  max_disk="$(echo $disk_space_threshold | tr -d '%' )"
+  if (( ram_used_perc >= max_ram ))
+  then
+    add_message_to_queue "$accountname ram usage is over the specified threshold amount."
+  fi
+  if (( disk_used_perc >= max_disk ))
+  then
+    add_message_to_queue "$accountname disk usage is over the specified threshold amount."
+  fi
+}
+
+function send_warnings(){
+  if [ ! -f "$temp_dir/last_send_message_epoch.txt" ]
+  then
+    echo $now_epoch > "$temp_dir/last_send_message_epoch.txt"
+  else
+    config_minutes_in_seconds="$((bpm_warning_alert_threshold * 60))"
+    last_msg=$(cat "$temp_dir/last_send_message_epoch.txt")
+    if (( (datenow - last_msg) >= config_minutes_in_seconds )) && (( $(wc -l "$temp_dir/msg_queue.txt" | awk '{print $1}') > 1 ))
+    then
+      send_telegram_messages
+    fi
+  fi
+}
+
 #----------------------------------------------------------------------------------------------------#
 # TRANSLATE THE TIME FORMAT FROM REMCLI FORMATE TO EPOCH TIME                                        #
 #----------------------------------------------------------------------------------------------------#
@@ -233,17 +309,21 @@ echo ""
 
 case "$switch" in
 
-on|On|ON) if [ -z "$status" ]; then
-          while (( ($now_epoch - $last_block_epoch) >= $config_minutes_in_seconds ))
-          do
-                last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
-                last_block_epoch=$(remnodelogtime_to_epoch "$last_block_date")
-                current_minutes=$(( ($now_epoch - $last_block_epoch) / 60 ))
-                config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
-                telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
-                curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
-                sleep $config_minutes_in_seconds
-          done
+on|On|ON) if [ -z "$status" ] 
+          then
+            last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+            last_block=$(remnodelogtime_to_epoch "$last_block_date")
+            current_minutes=$(( ($now_epoch - $last_block_epoch) / 60 ))
+            config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
+            if [ "$(echo $bp_monitor_check_producer | tr '[:upper:]' '[:lower:]' )" == "true" ]
+            then
+              check_produce_minutes
+            fi
+            if [ "$(echo $bp_monitor_check_server | tr '[:upper:]' '[:lower:]' )" == "true" ]
+            then
+              check_disk_and_ram
+            fi
+            send_warnings
           fi
         ;;
 
