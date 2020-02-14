@@ -114,6 +114,26 @@ fi
 #****************************************************************************************************#
 
 #----------------------------------------------------------------------------------------------------#
+# GET SERVER NAME IF NOT ALREADY ON THE CONFIG FILE                                                  #
+#----------------------------------------------------------------------------------------------------#
+
+if get_config_value servername
+then
+  servername="$global_value"
+else
+  if ! grep "^servername" "$config_file" > /dev/null 2>&1
+  then
+    echo ""
+    read -p "ENTER YOUR SERVER NAME?: " -e servername
+    echo ""
+    printf -- "%s\n" "servername=$servername" >> "$config_file"
+  else
+    servername=ProducerNode
+    sed -i "s/servername=/servername=$servername/g" "$config_file"
+  fi
+fi
+
+#----------------------------------------------------------------------------------------------------#
 # GET PRODUCER NAME IF NOT ALREADY ON THE CONFIG FILE                                                #
 #----------------------------------------------------------------------------------------------------#
 
@@ -255,6 +275,24 @@ function send_telegram_messages(){
   fi
 }
 
+function check_remcli_info(){
+  if ! timeout 10s remcli get info 2>&1 | grep server_version &>/dev/null
+  then
+    add_message_to_queue "$servername failed to receive a response from \"remcli get info\""
+  fi
+}
+
+function check_produce_minutes(){
+  last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+  last_block=$(remnodelogtime_to_epoch "$last_block_date")
+  current_minutes=$(( ($second_date - $last_block) / 60 ))
+  config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
+  if (( ($now_epoch - $last_block_epoch) >= $config_minutes_in_seconds ))
+  then
+    add_message_to_queue "$accountname has stopped producing blocks for $current_minutes minutes"
+  fi
+}
+
 function check_disk_and_ram(){
   ram_used_perc="$(free | grep Mem | awk '{print $3/$2 * 100.0}' | awk -F '.' '{print $1}')"
   max_ram="$(echo $ram_usage_threshold | tr -d '%' )"
@@ -262,11 +300,11 @@ function check_disk_and_ram(){
   max_disk="$(echo $disk_space_threshold | tr -d '%' )"
   if (( ram_used_perc >= max_ram ))
   then
-    add_message_to_queue "$accountname ram usage is over the specified threshold amount."
+    add_message_to_queue "$servername ram usage is over the specified threshold amount."
   fi
   if (( disk_used_perc >= max_disk ))
   then
-    add_message_to_queue "$accountname disk usage is over the specified threshold amount."
+    add_message_to_queue "$servername disk usage is over the specified threshold amount."
   fi
 }
 
@@ -309,17 +347,17 @@ case "$switch" in
 
 on|On|ON) if [ -z "$status" ] 
           then
-            last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
-            last_block=$(remnodelogtime_to_epoch "$last_block_date")
-            current_minutes=$(( ($second_date - $last_block) / 60 ))
-            config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
-            if [ "$(echo $bp_monitor_check_producer | tr '[:upper:]' '[:lower:]' )" == "true" ]
+            if [ "$(echo $bp_monitor_check_info | tr '[:upper:]' '[:lower:]' )" == "true" ]
             then
-              check_produce_minutes
+              check_remcli_info
             fi
             if [ "$(echo $bp_monitor_check_server | tr '[:upper:]' '[:lower:]' )" == "true" ]
             then
               check_disk_and_ram
+            fi
+            if [ "$(echo $bp_monitor_check_producer | tr '[:upper:]' '[:lower:]' )" == "true" ]
+            then
+              check_produce_minutes
             fi
             send_warnings
           fi
