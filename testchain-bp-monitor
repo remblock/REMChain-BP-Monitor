@@ -340,15 +340,15 @@ case "$switch" in
 
 on|On|ON) if [ -z "$status" ] 
           then
-            if [ "$(echo $bp_monitor_check_info | tr '[:upper:]' '[:lower:]' )" == "true" ]
+            if [ "$(echo $check_info | tr '[:upper:]' '[:lower:]' )" == "true" ]
             then
               check_remcli_info
             fi
-            if [ "$(echo $bp_monitor_check_server | tr '[:upper:]' '[:lower:]' )" == "true" ]
+            if [ "$(echo $check_server | tr '[:upper:]' '[:lower:]' )" == "true" ]
             then
               check_disk_and_ram
             fi
-            if [ "$(echo $bp_monitor_check_producer | tr '[:upper:]' '[:lower:]' )" == "true" ]
+            if [ "$(echo $check_producer | tr '[:upper:]' '[:lower:]' )" == "true" ]
             then
               check_produce_minutes
             fi
