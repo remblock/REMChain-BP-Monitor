@@ -246,13 +246,9 @@ fi
 # REMOVE OLD LINES THAT ONLY CHANGE IN MINUTES DISPLAYED                                             #
 #****************************************************************************************************#
 
-# It receives only the base of the line befores the numbers curresponding to time
-
 function remove_lines_repeated_time(){
   sed -i "/^$1/d" "$temp_dir/msg_queue.txt"
 }
-
-#Remove 2 consecutive empty lines before sending the message
 
 function remove_empty_lines(){
   sed -i '/^$/{N;/^\n$/d;}' "$temp_dir/msg_queue.txt"
@@ -262,8 +258,6 @@ function remove_empty_lines(){
     sed -i '1d' "$temp_dir/msg_queue.txt"
   fi
 }
-
-#Send the queued messages to telegram and empty the queue
 
 function send_telegram_messages(){
   if [ ! -z "$telegram_token" ] && [ ! -z "$telegram_chatid" ]
