@@ -125,7 +125,6 @@ else
   then
     echo ""
     read -p "ENTER YOUR SERVER NAME?: " -e servername
-    echo ""
     printf -- "%s\n" "servername=$servername" >> "$config_file"
   else
     servername=ProducerNode
