@@ -271,7 +271,7 @@ function send_telegram_messages(){
     remove_empty_lines
     curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$(echo -e "BP Warning Alert\n--------------------------------------";cat $temp_dir/msg_queue.txt)" &>/dev/null
     > $temp_dir/msg_queue.txt
-    echo $second_date > "$temp_dir/last_send_message_epoch.txt"
+    echo $second_date > "$temp_dir/last_send_message.txt"
   fi
 }
 
@@ -284,37 +284,37 @@ function check_remcli_info(){
 
 function check_produce_minutes(){
   last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
-  last_block=$(remnodelogtime_to_epoch "$last_block_date")
+  last_block=$(remnodelogtime_to_date "$last_block_date")
   current_minutes=$(( ($second_date - $last_block) / 60 ))
   config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
-  if (( ($now_epoch - $last_block_epoch) >= $config_minutes_in_seconds ))
+  if (( ($second_date - $last_block) >= $config_minutes_in_seconds ))
   then
     add_message_to_queue "$accountname has stopped producing blocks for $current_minutes minutes"
   fi
 }
 
 function check_disk_and_ram(){
-  ram_used_perc="$(free | grep Mem | awk '{print $3/$2 * 100.0}' | awk -F '.' '{print $1}')"
+  ram_used_percertage="$(free | grep Mem | awk '{print $3/$2 * 100.0}' | awk -F '.' '{print $1}')"
   max_ram="$(echo $ram_usage_threshold | tr -d '%' )"
-  disk_used_perc="$(df -h | grep -w '/' | awk '{print $5}' | tr -d '%')"
+  disk_used_percertage="$(df -h | grep -w '/' | awk '{print $5}' | tr -d '%')"
   max_disk="$(echo $disk_space_threshold | tr -d '%' )"
-  if (( ram_used_perc >= max_ram ))
+  if (( ram_used_percertage >= max_ram ))
   then
     add_message_to_queue "$servername ram usage is over the specified threshold amount."
   fi
-  if (( disk_used_perc >= max_disk ))
+  if (( disk_used_percertage >= max_disk ))
   then
     add_message_to_queue "$servername disk usage is over the specified threshold amount."
   fi
 }
 
 function send_warnings(){
-  if [ ! -f "$temp_dir/last_send_message_epoch.txt" ]
+  if [ ! -f "$temp_dir/last_send_message.txt" ]
   then
-    echo $second_date > "$temp_dir/last_send_message_epoch.txt"
+    echo $second_date > "$temp_dir/last_send_message.txt"
   else
     config_minutes_in_seconds="$((bpm_warning_alert_threshold * 60))"
-    last_msg=$(cat "$temp_dir/last_send_message_epoch.txt")
+    last_msg=$(cat "$temp_dir/last_send_message.txt")
     if (( (second_date - last_msg) >= config_minutes_in_seconds )) && (( $(wc -l "$temp_dir/msg_queue.txt" | awk '{print $1}') > 1 ))
     then
       send_telegram_messages
@@ -326,7 +326,7 @@ function send_warnings(){
 # TRANSLATE THE TIME FORMAT FROM REMCLI FORMATE TO EPOCH TIME                                        #
 #----------------------------------------------------------------------------------------------------#
 
-function remnodelogtime_to_epoch() {
+function remnodelogtime_to_date() {
   temp_date="$( echo $1 | awk -F '.' '{ print $1}' | tr '-' '/' | tr 'T' ' ')"
   echo $(date "+%s" -d "$temp_date")
 }
