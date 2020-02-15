@@ -88,12 +88,11 @@ then
   echo "#Configuration file for the unregprod script" > "$config_file"
   echo "#Make the entries as variable=value" >> "$config_file"
   echo " " >> "$config_file"
-  echo "check_info=false" >> "$config_file"
+  echo "check_info=true" >> "$config_file"
   echo "check_server=true" >> "$config_file"
   echo "check_producer=true" >> "$config_file"
   echo "ram_usage_threshold=80" >> "$config_file"
   echo "disk_space_threshold=80" >> "$config_file"    
-  echo "check_produce_minutes=3" >> "$config_file"
   echo "warning_alert_threshold=3" >> "$config_file"
   echo " " >> "$config_file"
 fi
