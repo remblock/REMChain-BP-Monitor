@@ -29,13 +29,21 @@ temp_dir="/root/remblock/bp-monitor/bp-monitor-temp"
 cron_cmd="/root/remblock/bp-monitor/testchain-bp-monitor"
 PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 
-#----------------------------------------------------------------------------------------------------#
-# REMOVE EXISTING CRONTAB LINE IF IT EXIST WHILE CONFIG DOESN'T                                      #
-#----------------------------------------------------------------------------------------------------#
+#-----------------------------------------------------------------------------------------------------
+# GET VARIABLES FROM THE CONFIG SOURCE
+#-----------------------------------------------------------------------------------------------------
 
-if [ ! -f "$config_file" ]
+source "/root/remblock/autobot/config"
+
+#Install and update crontab line
+if [ ! -z "$ALERT_THRESHOLD" ]
 then
-crontab -u root -l | grep -v ^# | grep -v "$cron_cmd" | crontab -u root -
+  #Fix crontab to match time in ALERT_THRESHOLD
+  CRON_CMD="/root/remblock/autobot/bpmonitor.sh"
+  #Remove previous line of cron
+  crontab -u root -l | grep -v 'bpmonitor.sh'  | crontab -u root -
+  #Add new line that matches desired interval time
+ (crontab -u root -l ; echo "*/$ALERT_THRESHOLD * * * * $CRON_CMD") | crontab -u root -
 fi
 
 #----------------------------------------------------------------------------------------------------#
@@ -88,14 +96,36 @@ then
   echo "#Configuration file for the unregprod script" > "$config_file"
   echo "#Make the entries as variable=value" >> "$config_file"
   echo " " >> "$config_file"
-  echo "check_info=true" >> "$config_file"
-  echo "check_server=true" >> "$config_file"
-  echo "check_producer=true" >> "$config_file"
-  echo "ram_usage_threshold=80" >> "$config_file"
-  echo "disk_space_threshold=80" >> "$config_file"    
-  echo "warning_alert_threshold=3" >> "$config_file"
+  echo "check_info=" >> "$config_file"
+  echo "check_server=" >> "$config_file"
+  echo "check_producer=" >> "$config_file"
+  echo "check_telegram=" >> "$config_file"
+  echo "set_server_name=" >> "$config_file"
+  echo "set_account_name=" >> "$config_file"
+  echo "set_telegram_token=" >> "$config_file"
+  echo "set_telegram_chatid=" >> "$config_file"
+  echo "ram_usage_threshold=" >> "$config_file"
+  echo "disk_space_threshold=" >> "$config_file"
+  echo "last_produce_minutes=" >> "$config_file"
+  echo "warning_alert_threshold=" >> "$config_file"
   echo " " >> "$config_file"
 fi
+
+#-----------------------------------------------------------------------------------------------------
+# GET CONFIGURATION FROM THE CONFIG FILE
+#-----------------------------------------------------------------------------------------------------
+
+check_info="$(grep -v '^#' "$config_file" | grep '^check_info=' | awk -F '=' '{print $2}')"
+check_server="$(grep -v '^#' "$config_file" | grep '^check_server=' | awk -F '=' '{print $2}')"
+check_producer="$(grep -v '^#' "$config_file" | grep '^check_producer=' | awk -F '=' '{print $2}')"
+alert_telegram="$(grep -v '^#' "$config_file" | grep '^alert_telegram=' | awk -F '=' '{print $2}')"
+set_server_name="$(grep -v '^#' "$config_file" | grep '^set_server_name=' | awk -F '=' '{print $2}')"
+set_account_name="$(grep -v '^#' "$config_file" | grep '^set_account_name=' | awk -F '=' '{print $2}')"
+set_telegram_token="$(grep -v '^#' "$config_file" | grep '^ set_telegram_token=' | awk -F '=' '{print $2}')"
+set_telegram_chatid="$(grep -v '^#' "$config_file" | grep '^set_telegram_chatid=' | awk -F '=' '{print $2}')"
+ram_usage_threshold="$(grep -v '^#' "$config_file" | grep '^ram_usage_threshold=' | awk -F '=' '{print $2}')"
+disk_space_threshold="$(grep -v '^#' "$config_file" | grep '^disk_space_threshold=' | awk -F '=' '{print $2}')"
+warning_alert_threshold="$(grep -v '^#' "$config_file" | grep '^warning_alert_threshold=' | awk -F '=' '{print $2}')"
 
 #----------------------------------------------------------------------------------------------------#
 # CREATES THE CHECK BP MONITOR SCRIPT IF IT DOESN'T EXIST                                            #
@@ -116,18 +146,18 @@ fi
 # GET SERVER NAME IF NOT ALREADY ON THE CONFIG FILE                                                  #
 #----------------------------------------------------------------------------------------------------#
 
-if get_config_value servername
+if get_config_value set_server_name
 then
-  servername="$global_value"
+  set_server_name="$global_value"
 else
-  if ! grep "^servername" "$config_file" > /dev/null 2>&1
+  if grep "^set_server_name" "$config_file" > /dev/null 2>&1
   then
     echo ""
-    read -p "ENTER YOUR SERVER NAME?: " -e servername
-    printf -- "%s\n" "servername=$servername" >> "$config_file"
+    read -p "ENTER YOUR SERVER NAME?: " -e set_server_name
+    sed -i "s/set_server_name=/set_server_name=$set_server_name/g" "$config_file"
   else
-    servername=ProducerNode
-    sed -i "s/servername=/servername=$servername/g" "$config_file"
+    servername=<SetYourServerName>
+    sed -i "s/set_server_name=/set_server_name=$set_server_name/g" "$config_file"
   fi
 fi
 
@@ -135,26 +165,23 @@ fi
 # GET PRODUCER NAME IF NOT ALREADY ON THE CONFIG FILE                                                #
 #----------------------------------------------------------------------------------------------------#
 
-if get_config_value accountname
+if get_config_value set_account_name
 then
-  accountname="$global_value"
+  set_account_name="$global_value"
 else
-  if ! grep "^accountname" "$config_file" > /dev/null 2>&1
+  if grep "^set_account_name" "$config_file" > /dev/null 2>&1
   then
-    accountname=$(cat config/config.ini | grep 'producer-name' | awk '{print $3}')
-    printf -- "%s\n" "accountname=$accountname" >> "$config_file"
-  else
-    accountname=$(cat config/config.ini | grep 'producer-name' | awk '{print $3}')
-    sed -i "s/accountname=/accountname=$accountname/g" "$config_file"
+    set_account_name=$(cat config/config.ini | grep 'producer-name' | awk '{print $3}')
+    sed -i "s/set_account_name=/set_account_name=$set_account_name/g" "$config_file"
   fi
 fi
-if grep "^accountname" "$config_file" > /dev/null 2>&1
+if grep "^set_account_name" "$config_file" > /dev/null 2>&1
 then
-  if [ -z "$accountname" ]
+  if [ -z "$set_account_name" ]
   then
     echo ""
-    read -p "ENTER YOUR PRODUCER NAME: " -e accountname
-    sed -i "s/accountname=/accountname=$accountname/g" "$config_file"
+    read -p "ENTER YOUR PRODUCER NAME: " -e set_account_name
+    sed -i "s/set_account_name=/set_account_name=$set_account_name/g" "$config_file"
   fi
 fi
 
@@ -162,47 +189,45 @@ fi
 # GET TELEGRAM DATA IF NOT ALREADY ON THE CONFIG FILE                                                #
 #----------------------------------------------------------------------------------------------------#
 
-if get_config_value telegram_enabled
+if get_config_value alert_telegram
 then
-  telegram_enabled="$global_value"
-elif ! grep "^telegram_enabled" "$config_file" > /dev/null 2>&1
-then
-  echo ""
-  if get_user_answer_yn "ENABLE TELEGRAM NOTIFICATIONS"
+  alert_telegram="$global_value"
+else
+  if grep "^alert_telegram" "$config_file" > /dev/null 2>&1
   then
-    telegram_enabled=true
-    printf -- "%s\n" "telegram_enabled=$telegram_enabled" >> "$config_file"
-  else
-    telegram_enabled=false
-    printf -- "%s\n" "telegram_enabled=$telegram_enabled" >> "$config_file"
-  fi
-fi
-if $telegram_enabled
-then
-  if get_config_value telegram_token
-  then
-    telegram_token="$global_value"
-  else
-    if ! grep "^telegram_token" "$config_file" > /dev/null 2>&1
+    echo ""
+    if get_user_answer_yn "ENABLE TELEGRAM NOTIFICATIONS"
     then
-      echo ""
-      read -p "ENTER YOUR TELEGRAM TOKEN API: " -e telegram_token
-      printf -- "%s\n" "telegram_token=$telegram_token" >> "$config_file"
+      alert_telegram=true
+      sed -i "s/alert_telegram=/alert_telegram=$alert_telegram/g" "$config_file"
     else
-      sed -i "s/telegram_token=/telegram_token=$telegram_token/g" "$config_file"
+      alert_telegram=false
+      sed -i "s/alert_telegram=/alert_telegram=$alert_telegram/g" "$config_file"
     fi
   fi
-  if get_config_value telegram_chatid
+fi
+if $alert_telegram
+then
+  if get_config_value set_telegram_token
   then
-    telegram_chatid="$global_value"
+    set_telegram_token="$global_value"
   else
-    if ! grep "^telegram_chatid" "$config_file" > /dev/null 2>&1
+    if grep "^set_telegram_token" "$config_file" > /dev/null 2>&1
     then
       echo ""
-      read -p "ENTER YOUR TELEGRAM CHAT ID: " -e telegram_chatid
-      printf -- "%s\n" "telegram_chatid=$telegram_chatid" >> "$config_file"
-    else
-      sed -i "s/telegram_token=/telegram_token=$telegram_token/g" "$config_file"
+      read -p "ENTER YOUR TELEGRAM TOKEN API: " -e set_telegram_token
+      sed -i "s/set_telegram_token=/set_telegram_token=$set_telegram_token/g" "$config_file"
+    fi
+  fi
+  if get_config_value set_telegram_chatid
+  then
+    set_telegram_chatid="$global_value"
+  else
+    if grep "^set_telegram_chatid" "$config_file" > /dev/null 2>&1
+    then
+      echo ""
+      read -p "ENTER YOUR TELEGRAM CHAT ID: " -e set_telegram_chatid
+      sed -i "s/set_telegram_chatid=/set_telegram_chatid=$set_telegram_chatid/g" "$config_file"
     fi
   fi
 fi
@@ -211,19 +236,16 @@ fi
 # USER BLOCK MINUTE VALUE IF NOT SET IN THE CONFIG FILE                                              #
 #----------------------------------------------------------------------------------------------------#
 
-if get_config_value check_last_block_minutes
+if get_config_value last_produce_minutes
 then
-  check_last_block_minutes="$global_value"
+  last_produce_minutes="$global_value"
 else
-  if ! grep "^check_last_block_minutes" "$config_file" > /dev/null 2>&1
+  if ! grep "^last_produce_minutes" "$config_file" > /dev/null 2>&1
   then
     echo ""
-    read -p "ENTER MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e check_last_block_minutes
+    read -p "ENTER MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e last_produce_minutes
     echo ""
-    printf -- "%s\n" "check_last_block_minutes=$check_last_block_minutes" >> "$config_file"
-  else
-    check_last_block_minutes=6
-    sed -i "s/check_last_block_minutes=/check_last_block_minutes=$check_last_block_minutes/g" "$config_file"
+    sed -i "s/last_produce_minutes=/last_produce_minutes=$last_produce_minutes/g" "$config_file"
   fi
 fi
 
