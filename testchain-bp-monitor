@@ -39,8 +39,12 @@ then
   cp -p "$0" "$create_dir"
 fi
 
+#****************************************************************************************************#
+#                                       FUNCTIONS DEFINITIONS                                        #
+#****************************************************************************************************#
+
 #----------------------------------------------------------------------------------------------------#
-# GET YES OR NO ANSWER FROM USER                                                                     #
+# FUNCTION TO GET YES OR NO ANSWER FROM USER                                                         #
 #----------------------------------------------------------------------------------------------------#
 
 function get_user_answer_yn(){
@@ -57,7 +61,7 @@ function get_user_answer_yn(){
 }
 
 #----------------------------------------------------------------------------------------------------#
-# GET VALUE FROM THE CONFIG FILE AND RETURN IT WITH THE VARIABLE "global_value"                      #
+# FUNCTION TO GET VALUE FROM THE CONFIG FILE AND RETURN IT WITH THE VARIABLE "global_value"          #
 #----------------------------------------------------------------------------------------------------#
 
 function get_config_value() {
@@ -68,6 +72,113 @@ function get_config_value() {
   else
     return 0
   fi
+}
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO CHECK REMCLI GET INFO RESPONSE                                                         #
+#----------------------------------------------------------------------------------------------------#
+
+function check_remcli_info(){
+  if ! timeout 10s remcli get info 2>&1 | grep server_version &>/dev/null
+  then
+    add_message_to_queue "$servername failed to receive a response from \"remcli get info\""
+  fi
+}
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO CHECK WHETHER PRODUCER IS PRODUCING BLOCKS                                             #
+#----------------------------------------------------------------------------------------------------#
+
+function check_produce_minutes(){
+  last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+  last_block=$(remnodelogtime_to_date "$last_block_date")
+  current_minutes=$(( ($second_date - $last_block) / 60 ))
+  config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
+  if (( ($second_date - $last_block) >= $config_minutes_in_seconds ))
+  then
+    add_message_to_queue "$accountname has stopped producing blocks for $current_minutes minutes"
+  fi
+}
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO CHECK RAM AND DISK SPACE                                                               #
+#----------------------------------------------------------------------------------------------------#
+
+function check_disk_and_ram(){
+  ram_used_percertage="$(free | grep Mem | awk '{print $3/$2 * 100.0}' | awk -F '.' '{print $1}')"
+  max_ram="$(echo $ram_usage_threshold | tr -d '%' )"
+  disk_used_percertage="$(df -h | grep -w '/' | awk '{print $5}' | tr -d '%')"
+  max_disk="$(echo $disk_space_threshold | tr -d '%' )"
+  if (( ram_used_percertage >= max_ram ))
+  then
+    add_message_to_queue "$servername ram usage is over the specified threshold amount."
+  fi
+  if (( disk_used_percertage >= max_disk ))
+  then
+    add_message_to_queue "$servername disk usage is over the specified threshold amount."
+  fi
+}
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO REMOVE OLD LINES THAT ONLY CHANGE IN MINUTES DISPLAYED                                 #
+#----------------------------------------------------------------------------------------------------#
+
+function remove_lines_repeated_time(){
+  sed -i "/^$1/d" "$temp_dir/msg_queue.txt"
+}
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO EMPTY LINES                                                                            #
+#----------------------------------------------------------------------------------------------------#
+
+function remove_empty_lines(){
+  sed -i '/^$/{N;/^\n$/d;}' "$temp_dir/msg_queue.txt"
+  #if the first line is empty, delete it
+  if ! [[ "$(head -1 $temp_dir/msg_queue.txt)" =~ [a-zA-Z0-9] ]]
+  then
+    sed -i '1d' "$temp_dir/msg_queue.txt"
+  fi
+}
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO SEND TELEGRAM NOTIFICATIONS                                                            #
+#----------------------------------------------------------------------------------------------------#
+
+function send_telegram_messages(){
+  if [ ! -z "$telegram_token" ] && [ ! -z "$telegram_chatid" ]
+  then
+    remove_empty_lines
+    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$(echo -e "BP Warning Alert\n--------------------------------------";cat $temp_dir/msg_queue.txt)" &>/dev/null
+    > $temp_dir/msg_queue.txt
+    echo $second_date > "$temp_dir/last_send_message.txt"
+  fi
+}
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO SEND WARNING NOTIFICATIONS                                                             #
+#----------------------------------------------------------------------------------------------------#
+
+function send_warnings(){
+  if [ ! -f "$temp_dir/last_send_message.txt" ]
+  then
+    echo $second_date > "$temp_dir/last_send_message.txt"
+  else
+    config_minutes_in_seconds="$((bpm_warning_alert_threshold * 60))"
+    last_msg=$(cat "$temp_dir/last_send_message.txt")
+    if (( (second_date - last_msg) >= config_minutes_in_seconds )) && (( $(wc -l "$temp_dir/msg_queue.txt" | awk '{print $1}') > 1 ))
+    then
+      send_telegram_messages
+    fi
+  fi
+}
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO TRANSLATE THE TIME FORMAT FROM REMCLI FORMATE TO EPOCH TIME                            #
+#----------------------------------------------------------------------------------------------------#
+
+function remnodelogtime_to_date() {
+  temp_date="$( echo $1 | awk -F '.' '{ print $1}' | tr '-' '/' | tr 'T' ' ')"
+  echo $(date "+%s" -d "$temp_date")
 }
 
 #----------------------------------------------------------------------------------------------------#
@@ -322,10 +433,6 @@ then
   fi
 fi
 
-#****************************************************************************************************#
-#                                       FUNCTIONS DEFINITIONS                                        #
-#****************************************************************************************************#
-
 #----------------------------------------------------------------------------------------------------#
 # GET VARIABLES FROM THE CONFIG SOURCE                                                               #
 #----------------------------------------------------------------------------------------------------#
@@ -341,89 +448,6 @@ then
   #Add new line that matches desired interval time
  (crontab -u root -l ; echo "*/$warning_alert_threshold * * * * $cron_cmd") | crontab -u root -
 fi
-
-#----------------------------------------------------------------------------------------------------#
-# REMOVE OLD LINES THAT ONLY CHANGE IN MINUTES DISPLAYED                                             #
-#----------------------------------------------------------------------------------------------------#
-
-function remove_lines_repeated_time(){
-  sed -i "/^$1/d" "$temp_dir/msg_queue.txt"
-}
-
-function remove_empty_lines(){
-  sed -i '/^$/{N;/^\n$/d;}' "$temp_dir/msg_queue.txt"
-  #if the first line is empty, delete it
-  if ! [[ "$(head -1 $temp_dir/msg_queue.txt)" =~ [a-zA-Z0-9] ]]
-  then
-    sed -i '1d' "$temp_dir/msg_queue.txt"
-  fi
-}
-
-function send_telegram_messages(){
-  if [ ! -z "$telegram_token" ] && [ ! -z "$telegram_chatid" ]
-  then
-    remove_empty_lines
-    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$(echo -e "BP Warning Alert\n--------------------------------------";cat $temp_dir/msg_queue.txt)" &>/dev/null
-    > $temp_dir/msg_queue.txt
-    echo $second_date > "$temp_dir/last_send_message.txt"
-  fi
-}
-
-function check_remcli_info(){
-  if ! timeout 10s remcli get info 2>&1 | grep server_version &>/dev/null
-  then
-    add_message_to_queue "$servername failed to receive a response from \"remcli get info\""
-  fi
-}
-
-function check_produce_minutes(){
-  last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
-  last_block=$(remnodelogtime_to_date "$last_block_date")
-  current_minutes=$(( ($second_date - $last_block) / 60 ))
-  config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
-  if (( ($second_date - $last_block) >= $config_minutes_in_seconds ))
-  then
-    add_message_to_queue "$accountname has stopped producing blocks for $current_minutes minutes"
-  fi
-}
-
-function check_disk_and_ram(){
-  ram_used_percertage="$(free | grep Mem | awk '{print $3/$2 * 100.0}' | awk -F '.' '{print $1}')"
-  max_ram="$(echo $ram_usage_threshold | tr -d '%' )"
-  disk_used_percertage="$(df -h | grep -w '/' | awk '{print $5}' | tr -d '%')"
-  max_disk="$(echo $disk_space_threshold | tr -d '%' )"
-  if (( ram_used_percertage >= max_ram ))
-  then
-    add_message_to_queue "$servername ram usage is over the specified threshold amount."
-  fi
-  if (( disk_used_percertage >= max_disk ))
-  then
-    add_message_to_queue "$servername disk usage is over the specified threshold amount."
-  fi
-}
-
-function send_warnings(){
-  if [ ! -f "$temp_dir/last_send_message.txt" ]
-  then
-    echo $second_date > "$temp_dir/last_send_message.txt"
-  else
-    config_minutes_in_seconds="$((bpm_warning_alert_threshold * 60))"
-    last_msg=$(cat "$temp_dir/last_send_message.txt")
-    if (( (second_date - last_msg) >= config_minutes_in_seconds )) && (( $(wc -l "$temp_dir/msg_queue.txt" | awk '{print $1}') > 1 ))
-    then
-      send_telegram_messages
-    fi
-  fi
-}
-
-#----------------------------------------------------------------------------------------------------#
-# TRANSLATE THE TIME FORMAT FROM REMCLI FORMATE TO EPOCH TIME                                        #
-#----------------------------------------------------------------------------------------------------#
-
-function remnodelogtime_to_date() {
-  temp_date="$( echo $1 | awk -F '.' '{ print $1}' | tr '-' '/' | tr 'T' ' ')"
-  echo $(date "+%s" -d "$temp_date")
-}
 
 #----------------------------------------------------------------------------------------------------#
 # MAIN PART OF THE SCRIPT                                                                            #
