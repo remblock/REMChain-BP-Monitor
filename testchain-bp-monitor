@@ -18,8 +18,9 @@ fi
 # CONFIGURATION VARIABLES                                                                            #
 #----------------------------------------------------------------------------------------------------#
 
-second_date="$(date +%s)"
-current_date="$(date +%d-%m-%Y)"
+second_date=$(date -d $now +%s)
+minute_date=$(date -d $now +%s%N)
+current_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 max_queued_msg_lines="50"
 log_file="/root/remnode.log"
 state_file="/root/check-bp-monitor"
@@ -50,9 +51,27 @@ on
 DOC
 fi
 
+#-----------------------------------------------------------------------------------------------------
+# SCHEDULE CRON FOR THE BP MONITOR SCRIPT
+#-----------------------------------------------------------------------------------------------------
+
+if ! crontab -l | grep -q "testchain-bp-monitor"
+then
+  (crontab -l ; echo "* * * * * $create_dir/testchain-bp-monitor >> $create_dir/${SCRIPT_LOG_FILE} 2>&1") | crontab -
+fi
+
 #****************************************************************************************************#
 #                                            FUNCTIONS                                               #
 #****************************************************************************************************#
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO TRANSLATE THE TIME FORMAT FROM REMCLI FORMATE TO EPOCH TIME                            #
+#----------------------------------------------------------------------------------------------------#
+
+function remnodelogtime_to_date() {
+  temp_date="$( echo $1 | awk -F '.' '{ print $1}' | tr '-' '/' | tr 'T' ' ')"
+  echo $(date "+%s" -d "$temp_date")
+}
 
 #----------------------------------------------------------------------------------------------------#
 # FUNCTION TO GET YES OR NO ANSWER FROM USER                                                         #
@@ -92,7 +111,7 @@ function get_config_value() {
 function check_remcli_info(){
   if ! timeout 10s remcli get info 2>&1 | grep server_version &>/dev/null
   then
-    add_message_to_queue "$servername failed to receive a response from \"remcli get info\""
+    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$servername failed to receive a response from \"remcli get info\"" &>/dev/null
   fi
 }
 
@@ -107,7 +126,7 @@ function check_produce_minutes(){
   config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
   if (( ($second_date - $last_block) >= $config_minutes_in_seconds ))
   then
-    add_message_to_queue "$accountname has stopped producing blocks for $current_minutes minutes"
+    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$accountname has stopped producing blocks for $current_minutes minutes." &>/dev/null
   fi
 }
 
@@ -122,78 +141,16 @@ function check_ram_and_disk(){
   max_disk="$(echo $disk_space_threshold | tr -d '%' )"
   if (( ram_used_percertage >= max_ram ))
   then
-    add_message_to_queue "$servername ram usage is over the specified threshold amount."
+    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$servername ram usage is over the specified threshold amount." &>/dev/null
   fi
   if (( disk_used_percertage >= max_disk ))
   then
-    add_message_to_queue "$servername disk usage is over the specified threshold amount."
+    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$servername disk usage is over the specified threshold amount." &>/dev/null  
   fi
-}
-
-#----------------------------------------------------------------------------------------------------#
-# FUNCTION TO REMOVE OLD LINES THAT ONLY CHANGE IN MINUTES DISPLAYED                                 #
-#----------------------------------------------------------------------------------------------------#
-
-function remove_lines_repeated_time(){
-  sed -i "/^$1/d" "$temp_dir/msg_queue.txt"
-}
-
-#----------------------------------------------------------------------------------------------------#
-# FUNCTION TO EMPTY LINES                                                                            #
-#----------------------------------------------------------------------------------------------------#
-
-function remove_empty_lines(){
-  sed -i '/^$/{N;/^\n$/d;}' "$temp_dir/msg_queue.txt"
-  #if the first line is empty, delete it
-  if ! [[ "$(head -1 $temp_dir/msg_queue.txt)" =~ [a-zA-Z0-9] ]]
-  then
-    sed -i '1d' "$temp_dir/msg_queue.txt"
-  fi
-}
-
-#----------------------------------------------------------------------------------------------------#
-# FUNCTION TO SEND TELEGRAM NOTIFICATIONS                                                            #
-#----------------------------------------------------------------------------------------------------#
-
-function send_telegram_messages(){
-  if [ ! -z "$telegram_token" ] && [ ! -z "$telegram_chatid" ]
-  then
-    remove_empty_lines
-    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$(echo -e "BP Warning Alert\n--------------------------------------";cat $temp_dir/msg_queue.txt)" &>/dev/null
-    > $temp_dir/msg_queue.txt
-    echo $second_date > "$temp_dir/last_send_message.txt"
-  fi
-}
-
-#----------------------------------------------------------------------------------------------------#
-# FUNCTION TO SEND WARNING NOTIFICATIONS                                                             #
-#----------------------------------------------------------------------------------------------------#
-
-function send_warnings(){
-  if [ ! -f "$temp_dir/last_send_message.txt" ]
-  then
-    echo $second_date > "$temp_dir/last_send_message.txt"
-  else
-    config_minutes_in_seconds="$((bpm_warning_alert_threshold * 60))"
-    last_msg=$(cat "$temp_dir/last_send_message.txt")
-    if (( (second_date - last_msg) >= config_minutes_in_seconds )) && (( $(wc -l "$temp_dir/msg_queue.txt" | awk '{print $1}') > 1 ))
-    then
-      send_telegram_messages
-    fi
-  fi
-}
-
-#----------------------------------------------------------------------------------------------------#
-# FUNCTION TO TRANSLATE THE TIME FORMAT FROM REMCLI FORMATE TO EPOCH TIME                            #
-#----------------------------------------------------------------------------------------------------#
-
-function remnodelogtime_to_date() {
-  temp_date="$( echo $1 | awk -F '.' '{ print $1}' | tr '-' '/' | tr 'T' ' ')"
-  echo $(date "+%s" -d "$temp_date")
 }
 
 #****************************************************************************************************#
-#                                       CONFIG VARIABLES                                             #
+#                                          CONFIG VARIABLES                                          #
 #****************************************************************************************************#
 
 #----------------------------------------------------------------------------------------------------#
@@ -209,6 +166,8 @@ then
   echo "check_server=" >> "$config_file"
   echo "check_producer=" >> "$config_file"
   echo "check_telegram=" >> "$config_file"
+  echo "last_alert=2006-09-04" >> "$config_file"
+  echo "last_status=2006-09-04" >> "$config_file"
   echo "set_server_name=" >> "$config_file"
   echo "set_account_name=" >> "$config_file"
   echo "set_telegram_token=" >> "$config_file"
@@ -220,9 +179,9 @@ then
   echo " " >> "$config_file"
 fi
 
-#-----------------------------------------------------------------------------------------------------
-# GET CONFIGURATION FROM THE CONFIG FILE
-#-----------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------#
+# GET CONFIGURATION FROM THE CONFIG FILE                                                             #
+#----------------------------------------------------------------------------------------------------#
 
 check_info="$(grep -v '^#' "$config_file" | grep '^check_info=' | awk -F '=' '{print $2}')"
 check_server="$(grep -v '^#' "$config_file" | grep '^check_server=' | awk -F '=' '{print $2}')"
@@ -238,7 +197,7 @@ last_produce_minutes="$(grep -v '^#' "$config_file" | grep '^last_produce_minute
 warning_alert_threshold="$(grep -v '^#' "$config_file" | grep '^warning_alert_threshold=' | awk -F '=' '{print $2}')"
 
 #****************************************************************************************************#
-#                                   GETTING USER VARIABLES                                           #
+#                                       GETTING USER VARIABLES                                       #
 #****************************************************************************************************#
 
 #----------------------------------------------------------------------------------------------------#
@@ -441,20 +400,14 @@ fi
 # GET VARIABLES FROM THE CONFIG SOURCE                                                               #
 #----------------------------------------------------------------------------------------------------#
 
-source "/root/remblock/autobot/config"
-
-#Install and update crontab line
 if [ ! -z "$warning_alert_threshold" ]
 then
-  #Fix crontab to match time in warning_alert_threshold
-  #Remove previous line of cron
   crontab -u root -l | grep -v 'testchain-bp-monitor'  | crontab -u root -
-  #Add new line that matches desired interval time
  (crontab -u root -l ; echo "*/$warning_alert_threshold * * * * $cron_cmd") | crontab -u root -
 fi
 
 #****************************************************************************************************#
-#                                   MAIN PART OF THE SCRIPT                                          #
+#                                     MAIN PART OF THE SCRIPT                                        #
 #****************************************************************************************************#
 
 switch=$(cat "$state_file")
@@ -481,7 +434,6 @@ on|On|ON) if [ -z "$status" ]
             then
               check_produce_minutes
             fi
-            send_warnings
           fi
         ;;
 
