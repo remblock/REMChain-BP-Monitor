@@ -29,23 +29,6 @@ temp_dir="/root/remblock/bp-monitor/bp-monitor-temp"
 cron_cmd="/root/remblock/bp-monitor/testchain-bp-monitor"
 PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 
-#-----------------------------------------------------------------------------------------------------
-# GET VARIABLES FROM THE CONFIG SOURCE
-#-----------------------------------------------------------------------------------------------------
-
-source "/root/remblock/autobot/config"
-
-#Install and update crontab line
-if [ ! -z "$ALERT_THRESHOLD" ]
-then
-  #Fix crontab to match time in ALERT_THRESHOLD
-  CRON_CMD="/root/remblock/autobot/bpmonitor.sh"
-  #Remove previous line of cron
-  crontab -u root -l | grep -v 'bpmonitor.sh'  | crontab -u root -
-  #Add new line that matches desired interval time
- (crontab -u root -l ; echo "*/$ALERT_THRESHOLD * * * * $CRON_CMD") | crontab -u root -
-fi
-
 #----------------------------------------------------------------------------------------------------#
 # CREATE DIRECTORY IF IT DOESN'T EXIST                                                               #
 #----------------------------------------------------------------------------------------------------#
@@ -144,7 +127,7 @@ fi
 #****************************************************************************************************#
 
 #----------------------------------------------------------------------------------------------------#
-# GET SERVER NAME IF NOT ALREADY ON THE CONFIG FILE                                                  #
+# CHECK FOR SERVER NAME IF SET IN THE CONFIG FILE                                                    #
 #----------------------------------------------------------------------------------------------------#
 
 if get_config_value set_server_name
@@ -163,7 +146,7 @@ else
 fi
 
 #----------------------------------------------------------------------------------------------------#
-# GET PRODUCER NAME IF NOT ALREADY ON THE CONFIG FILE                                                #
+# CHECK FOR PRODUCER NAME IF SET IN THE CONFIG FILE                                                  #
 #----------------------------------------------------------------------------------------------------#
 
 if get_config_value set_account_name
@@ -187,7 +170,113 @@ then
 fi
 
 #----------------------------------------------------------------------------------------------------#
-# GET TELEGRAM DATA IF NOT ALREADY ON THE CONFIG FILE                                                #
+# CHECK FOR REMCLI GET INFO VARIABLE IF SET IN THE CONFIG FILE                                       #
+#----------------------------------------------------------------------------------------------------#
+
+if get_config_value check_info
+then
+  check_info="$global_value"
+else
+  if grep "^check_info" "$config_file" > /dev/null 2>&1
+  then
+    echo ""
+    if get_user_answer_yn "ENABLE CHECK FOR REMCLI GET INFO"
+    then
+      check_info=true
+      sed -i "s/check_info=/check_info=$check_info/g" "$config_file"
+    else
+      check_info=false
+      sed -i "s/check_info=/check_info=$check_info/g" "$config_file"
+    fi
+  fi
+fi
+
+#----------------------------------------------------------------------------------------------------#
+# CHECK FOR SERVER CONDITION VARIABLE IF SET IN THE CONFIG FILE                                      #
+#----------------------------------------------------------------------------------------------------#
+
+if get_config_value check_server
+then
+  check_server="$global_value"
+else
+  if grep "^check_server" "$config_file" > /dev/null 2>&1
+  then
+    echo ""
+    if get_user_answer_yn "ENABLE CHECK FOR SERVER CONDITION"
+    then
+      check_server=true
+      sed -i "s/check_server=/check_server=$check_server/g" "$config_file"
+    else
+      check_server=false
+      sed -i "s/check_server=/check_server=$check_server/g" "$config_file"
+    fi
+  fi
+fi
+if $check_server
+then
+  if get_config_value ram_usage_threshold
+  then
+    ram_usage_threshold="$global_value"
+  else
+    if grep "^ram_usage_threshold" "$config_file" > /dev/null 2>&1
+    then
+      echo ""
+      read -p "ENTER YOUR RAM THRESHOLD PERCENTAGE: " -e ram_usage_threshold
+      sed -i "s/ram_usage_threshold=/ram_usage_threshold=$ram_usage_threshold/g" "$config_file"
+    fi
+  fi
+  if get_config_value disk_space_threshold
+  then
+    disk_space_threshold="$global_value"
+  else
+    if grep "^disk_space_threshold" "$config_file" > /dev/null 2>&1
+    then
+      echo ""
+      read -p "ENTER YOUR DISK THRESHOLD PERCENTAGE: " -e disk_space_threshold
+      sed -i "s/disk_space_threshold=/disk_space_threshold=$disk_space_threshold/g" "$config_file"
+    fi
+  fi
+fi
+
+#----------------------------------------------------------------------------------------------------#
+# CHECK FOR PRODUCER VARIABLE IF SET IN THE CONFIG FILE                                              #
+#----------------------------------------------------------------------------------------------------#
+
+if get_config_value check_producer
+then
+  check_producer="$global_value"
+else
+  if grep "^check_producer" "$config_file" > /dev/null 2>&1
+  then
+    echo ""
+    if get_user_answer_yn "ENABLE CHECK FOR"
+    then
+      check_producer=true
+      sed -i "s/check_producer=/check_producer=$check_producer/g" "$config_file"
+    else
+      check_producer=false
+      sed -i "s/check_producer=/check_producer=$check_producer/g" "$config_file"
+    fi
+  fi
+fi
+if $check_producer
+then
+  if get_config_value last_produce_minutes
+  then
+    last_produce_minutes="$global_value"
+  else
+    if grep "^last_produce_minutes" "$config_file" > /dev/null 2>&1
+    then
+      echo ""
+      read -p "ENTER MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e last_produce_minutes
+      echo ""
+      sed -i "s/last_produce_minutes=/last_produce_minutes=$last_produce_minutes/g" "$config_file"
+    fi
+  fi
+fi
+
+#----------------------------------------------------------------------------------------------------#
+# CHECK FOR TELEGRAM VARIABLE IF SET IN THE CONFIG FILE                                              #
 #----------------------------------------------------------------------------------------------------#
 
 if get_config_value alert_telegram
@@ -233,96 +322,29 @@ then
   fi
 fi
 
-if get_config_value check_info
-then
-  check_info="$global_value"
-else
-  if grep "^check_info" "$config_file" > /dev/null 2>&1
-  then
-    echo ""
-    if get_user_answer_yn "ENABLE CHECK FOR REMCLI GET INFO"
-    then
-      check_info=true
-      sed -i "s/check_info=/check_info=$check_info/g" "$config_file"
-    else
-      check_info=false
-      sed -i "s/check_info=/check_info=$check_info/g" "$config_file"
-    fi
-  fi
-fi
-
-if get_config_value check_server
-then
-  check_server="$global_value"
-else
-  if grep "^check_server" "$config_file" > /dev/null 2>&1
-  then
-    echo ""
-    if get_user_answer_yn "ENABLE CHECK FOR SERVER CONDITION"
-    then
-      check_server=true
-      sed -i "s/check_server=/check_server=$check_server/g" "$config_file"
-    else
-      check_server=false
-      sed -i "s/check_server=/check_server=$check_server/g" "$config_file"
-    fi
-  fi
-fi
-
-if get_config_value check_producer
-then
-  check_producer="$global_value"
-else
-  if grep "^check_producer" "$config_file" > /dev/null 2>&1
-  then
-    echo ""
-    if get_user_answer_yn "ENABLE CHECK FOR PRODUCED BLOCK"
-    then
-      check_producer=true
-      sed -i "s/check_producer=/check_producer=$check_producer/g" "$config_file"
-    else
-      check_producer=false
-      sed -i "s/check_producer=/check_producer=$check_producer/g" "$config_file"
-    fi
-  fi
-fi
-
-#----------------------------------------------------------------------------------------------------#
-# USER BLOCK MINUTE VALUE IF NOT SET IN THE CONFIG FILE                                              #
-#----------------------------------------------------------------------------------------------------#
-
-if $check_producer
-then
-  if get_config_value last_produce_minutes
-  then
-    last_produce_minutes="$global_value"
-  else
-    if grep "^last_produce_minutes" "$config_file" > /dev/null 2>&1
-    then
-      echo ""
-      read -p "ENTER MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e last_produce_minutes
-      echo ""
-      sed -i "s/last_produce_minutes=/last_produce_minutes=$last_produce_minutes/g" "$config_file"
-    fi
-  fi
-fi
-
 #****************************************************************************************************#
 #                                       FUNCTIONS DEFINITIONS                                        #
 #****************************************************************************************************#
 
 #----------------------------------------------------------------------------------------------------#
-# INSTALL CRONTAB LINE IF IT DOESN'T EXIST                                                           #
+# GET VARIABLES FROM THE CONFIG SOURCE                                                               #
 #----------------------------------------------------------------------------------------------------#
 
-if [ ! -z "$cron_cmd" ] && ! crontab -u root -l | grep -v '^ *#' | grep "$cron_cmd" &>/dev/null
+source "/root/remblock/autobot/config"
+
+#Install and update crontab line
+if [ ! -z "$warning_alert_threshold" ]
 then
-  (crontab -u root -l ; echo "*/1 * * * * $cron_cmd") | crontab -u root -
+  #Fix crontab to match time in warning_alert_threshold
+  #Remove previous line of cron
+  crontab -u root -l | grep -v 'bpmonitor.sh'  | crontab -u root -
+  #Add new line that matches desired interval time
+ (crontab -u root -l ; echo "*/$warning_alert_threshold * * * * $cron_cmd") | crontab -u root -
 fi
 
-#****************************************************************************************************#
+#----------------------------------------------------------------------------------------------------#
 # REMOVE OLD LINES THAT ONLY CHANGE IN MINUTES DISPLAYED                                             #
-#****************************************************************************************************#
+#----------------------------------------------------------------------------------------------------#
 
 function remove_lines_repeated_time(){
   sed -i "/^$1/d" "$temp_dir/msg_queue.txt"
