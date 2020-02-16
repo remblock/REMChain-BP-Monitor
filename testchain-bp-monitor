@@ -110,7 +110,7 @@ function get_config_value() {
 function check_remcli_info(){
   if ! timeout 10s remcli get info 2>&1 | grep server_version &>/dev/null
   then
-    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$servername failed to receive a response from \"remcli get info\"" &>/dev/null
+    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$set_server_name failed to receive a response from \"remcli get info\"" &>/dev/null
   fi
 }
 
@@ -119,13 +119,13 @@ function check_remcli_info(){
 #----------------------------------------------------------------------------------------------------#
 
 function check_produce_minutes(){
-  last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+  last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $set_account_name -U $set_account_name | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
   last_block=$(remnodelogtime_to_date "$last_block_date")
   current_minutes=$(( ($second_date - $last_block) / 60 ))
   config_minutes_in_seconds=$(( (set_last_produce_minutes * 60) ))
   if (( ($second_date - $last_block) >= $config_minutes_in_seconds ))
   then
-    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$accountname has stopped producing blocks for $current_minutes minutes." &>/dev/null
+    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$set_account_name has stopped producing blocks for $current_minutes minutes." &>/dev/null
   fi
 }
 
@@ -140,11 +140,11 @@ function check_ram_and_disk(){
   max_disk="$(echo $disk_space_threshold | tr -d '%' )"
   if (( ram_used_percertage >= max_ram ))
   then
-    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$servername ram usage is over the specified threshold amount." &>/dev/null
+    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$set_server_name ram usage is over the specified threshold amount." &>/dev/null
   fi
   if (( disk_used_percertage >= max_disk ))
   then
-    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$servername disk usage is over the specified threshold amount." &>/dev/null  
+    curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$set_server_name disk usage is over the specified threshold amount." &>/dev/null  
   fi
 }
 
