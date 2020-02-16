@@ -122,7 +122,7 @@ function check_produce_minutes(){
   last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
   last_block=$(remnodelogtime_to_date "$last_block_date")
   current_minutes=$(( ($second_date - $last_block) / 60 ))
-  config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
+  config_minutes_in_seconds=$(( (set_last_produce_minutes * 60) ))
   if (( ($second_date - $last_block) >= $config_minutes_in_seconds ))
   then
     curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$accountname has stopped producing blocks for $current_minutes minutes." &>/dev/null
@@ -171,8 +171,8 @@ then
   echo "set_telegram_chatid=" >> "$config_file"
   echo "ram_usage_threshold=" >> "$config_file"
   echo "disk_space_threshold=" >> "$config_file"
-  echo "last_produce_minutes=" >> "$config_file"
   echo "warning_alert_threshold=" >> "$config_file"
+  echo "set_last_produce_minutes=" >> "$config_file"
   echo " " >> "$config_file"
 fi
 
@@ -190,8 +190,8 @@ set_telegram_token="$(grep -v '^#' "$config_file" | grep '^ set_telegram_token='
 set_telegram_chatid="$(grep -v '^#' "$config_file" | grep '^set_telegram_chatid=' | awk -F '=' '{print $2}')"
 ram_usage_threshold="$(grep -v '^#' "$config_file" | grep '^ram_usage_threshold=' | awk -F '=' '{print $2}')"
 disk_space_threshold="$(grep -v '^#' "$config_file" | grep '^disk_space_threshold=' | awk -F '=' '{print $2}')"
-set_producer_minutes="$(grep -v '^#' "$config_file" | grep '^last_produce_minutes=' | awk -F '=' '{print $2}')"
 warning_alert_threshold="$(grep -v '^#' "$config_file" | grep '^warning_alert_threshold=' | awk -F '=' '{print $2}')"
+set_last_produce_minutes="$(grep -v '^#' "$config_file" | grep '^set_last_produce_minutes=' | awk -F '=' '{print $2}')"
 
 #****************************************************************************************************#
 #                                       GETTING USER VARIABLES                                       #
@@ -332,16 +332,16 @@ else
 fi
 if $check_producer
 then
-  if get_config_value set_producer_minutes
+  if get_config_value set_last_produce_minutes
   then
-    set_producer_minutes="$global_value"
+    set_last_produce_minutes="$global_value"
   else
-    if grep "^set_producer_minutes" "$config_file" > /dev/null 2>&1
+    if grep "^set_last_produce_minutes" "$config_file" > /dev/null 2>&1
     then
       echo ""
-      read -p "ENTER MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e set_producer_minutes
+      read -p "ENTER MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e set_last_produce_minutes
       echo ""
-      sed -i "s/set_producer_minutes=/set_producer_minutes=$set_producer_minutes/g" "$config_file"
+      sed -i "s/set_last_produce_minutes=/set_last_produce_minutes=$set_last_produce_minutes/g" "$config_file"
     fi
   fi
 fi
