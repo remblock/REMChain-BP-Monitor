@@ -214,7 +214,7 @@ else
     read -p "ENTER YOUR SERVER NAME?: " -e set_server_name
     sed -i "s/set_server_name=/set_server_name=$set_server_name/g" "$config_file"
   else
-    set_server_name=Server 1
+    set_server_name="Server 1"
     sed -i "s/set_server_name=/set_server_name=$set_server_name/g" "$config_file"
   fi
 fi
