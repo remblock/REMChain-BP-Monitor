@@ -57,7 +57,7 @@ function get_user_answer_yn(){
 }
 
 #----------------------------------------------------------------------------------------------------#
-# GET VALUE FROM THE CONFIG FILE, RETURN IT WITH THE VARIABLE "global_value"                         #
+# GET VALUE FROM THE CONFIG FILE AND RETURN IT WITH THE VARIABLE "global_value"                      #
 #----------------------------------------------------------------------------------------------------#
 
 function get_config_value() {
