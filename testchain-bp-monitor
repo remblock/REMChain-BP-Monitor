@@ -193,7 +193,7 @@ set_telegram_token="$(grep -v '^#' "$config_file" | grep '^ set_telegram_token='
 set_telegram_chatid="$(grep -v '^#' "$config_file" | grep '^set_telegram_chatid=' | awk -F '=' '{print $2}')"
 ram_usage_threshold="$(grep -v '^#' "$config_file" | grep '^ram_usage_threshold=' | awk -F '=' '{print $2}')"
 disk_space_threshold="$(grep -v '^#' "$config_file" | grep '^disk_space_threshold=' | awk -F '=' '{print $2}')"
-last_produce_minutes="$(grep -v '^#' "$config_file" | grep '^last_produce_minutes=' | awk -F '=' '{print $2}')"
+set_producer_minutes="$(grep -v '^#' "$config_file" | grep '^last_produce_minutes=' | awk -F '=' '{print $2}')"
 warning_alert_threshold="$(grep -v '^#' "$config_file" | grep '^warning_alert_threshold=' | awk -F '=' '{print $2}')"
 
 #****************************************************************************************************#
@@ -335,16 +335,16 @@ else
 fi
 if $check_producer
 then
-  if get_config_value last_produce_minutes
+  if get_config_value set_producer_minutes
   then
-    last_produce_minutes="$global_value"
+    set_producer_minutes="$global_value"
   else
-    if grep "^last_produce_minutes" "$config_file" > /dev/null 2>&1
+    if grep "^set_producer_minutes" "$config_file" > /dev/null 2>&1
     then
       echo ""
-      read -p "ENTER MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e last_produce_minutes
+      read -p "ENTER MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e set_producer_minutes
       echo ""
-      sed -i "s/last_produce_minutes=/last_produce_minutes=$last_produce_minutes/g" "$config_file"
+      sed -i "s/set_producer_minutes=/set_producer_minutes=$set_producer_minutes/g" "$config_file"
     fi
   fi
 fi
@@ -392,6 +392,20 @@ then
       echo ""
       read -p "ENTER YOUR TELEGRAM CHAT ID: " -e set_telegram_chatid
       sed -i "s/set_telegram_chatid=/set_telegram_chatid=$set_telegram_chatid/g" "$config_file"
+    fi
+  fi
+fi
+if $alert_telegram
+then
+  if get_config_value warning_alert_threshold
+  then
+    warning_alert_threshold="$global_value"
+  else
+    if grep "^warning_alert_threshold" "$config_file" > /dev/null 2>&1
+    then
+      echo ""
+      read -p "ENTER YOUR ALERT THRESHOLD PERCENTAGE: " -e warning_alert_threshold
+      sed -i "s/warning_alert_threshold=/warning_alert_threshold=$warning_alert_threshold/g" "$config_file"
     fi
   fi
 fi
