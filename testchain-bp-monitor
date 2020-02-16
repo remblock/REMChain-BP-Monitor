@@ -339,8 +339,7 @@ then
     if grep "^set_last_produce_minutes" "$config_file" > /dev/null 2>&1
     then
       echo ""
-      read -p "ENTER MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e set_last_produce_minutes
-      echo ""
+      read -p "MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e set_last_produce_minutes
       sed -i "s/set_last_produce_minutes=/set_last_produce_minutes=$set_last_produce_minutes/g" "$config_file"
     fi
   fi
