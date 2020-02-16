@@ -403,6 +403,7 @@ then
       echo ""
       read -p "ENTER YOUR ALERT THRESHOLD MINUTE: " -e warning_alert_threshold
       sed -i "s/warning_alert_threshold=/warning_alert_threshold=$warning_alert_threshold/g" "$config_file"
+      echo ""
     fi
   fi
 fi
