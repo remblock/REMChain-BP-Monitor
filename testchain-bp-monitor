@@ -104,7 +104,7 @@ function check_produce_minutes(){
 # FUNCTION TO CHECK RAM AND DISK SPACE                                                               #
 #----------------------------------------------------------------------------------------------------#
 
-function check_disk_and_ram(){
+function check_ram_and_disk(){
   ram_used_percertage="$(free | grep Mem | awk '{print $3/$2 * 100.0}' | awk -F '.' '{print $1}')"
   max_ram="$(echo $ram_usage_threshold | tr -d '%' )"
   disk_used_percertage="$(df -h | grep -w '/' | awk '{print $5}' | tr -d '%')"
@@ -471,7 +471,7 @@ on|On|ON) if [ -z "$status" ]
             fi
             if [ "$(echo $check_server | tr '[:upper:]' '[:lower:]' )" == "true" ]
             then
-              check_disk_and_ram
+              check_ram_and_disk
             fi
             if [ "$(echo $check_producer | tr '[:upper:]' '[:lower:]' )" == "true" ]
             then
