@@ -39,6 +39,17 @@ then
   cp -p "$0" "$create_dir"
 fi
 
+#----------------------------------------------------------------------------------------------------#
+# CREATE STATE FILE IF IT DOESN'T EXIST                                                              #
+#----------------------------------------------------------------------------------------------------#
+
+if [ ! -f "$state_file" ]
+then
+cat > "$state_file" << 'DOC'
+on
+DOC
+fi
+
 #****************************************************************************************************#
 #                                       FUNCTIONS DEFINITIONS                                        #
 #****************************************************************************************************#
@@ -221,17 +232,6 @@ ram_usage_threshold="$(grep -v '^#' "$config_file" | grep '^ram_usage_threshold=
 disk_space_threshold="$(grep -v '^#' "$config_file" | grep '^disk_space_threshold=' | awk -F '=' '{print $2}')"
 last_produce_minutes="$(grep -v '^#' "$config_file" | grep '^last_produce_minutes=' | awk -F '=' '{print $2}')"
 warning_alert_threshold="$(grep -v '^#' "$config_file" | grep '^warning_alert_threshold=' | awk -F '=' '{print $2}')"
-
-#----------------------------------------------------------------------------------------------------#
-# CREATES THE CHECK BP MONITOR SCRIPT IF IT DOESN'T EXIST                                            #
-#----------------------------------------------------------------------------------------------------#
-
-if [ ! -f "$state_file" ]
-then
-cat > "$state_file" << 'DOC'
-on
-DOC
-fi
 
 #****************************************************************************************************#
 #                                   GETTING POSSIBLE MISSING VALUE                                   #
