@@ -18,13 +18,12 @@ fi
 # CONFIGURATION VARIABLES                                                                            #
 #----------------------------------------------------------------------------------------------------#
 
-second_date=$(date -d $current_date +%s)
-minute_date=$(date -d $current_date +%s%N)
-current_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 max_queued_msg_lines="50"
 log_file="/root/remnode.log"
 state_file="/root/check-bp-monitor"
 create_dir="/root/remblock/bp-monitor"
+second_date=$(date -d $current_date +%s)
+current_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 config_file="/root/remblock/bp-monitor/config"
 temp_dir="/root/remblock/bp-monitor/bp-monitor-temp"
 cron_cmd="/root/remblock/bp-monitor/testchain-bp-monitor"
