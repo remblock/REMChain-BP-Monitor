@@ -183,7 +183,7 @@ fi
 check_info="$(grep -v '^#' "$config_file" | grep '^check_info=' | awk -F '=' '{print $2}')"
 check_server="$(grep -v '^#' "$config_file" | grep '^check_server=' | awk -F '=' '{print $2}')"
 check_producer="$(grep -v '^#' "$config_file" | grep '^check_producer=' | awk -F '=' '{print $2}')"
-alert_telegram="$(grep -v '^#' "$config_file" | grep '^alert_telegram=' | awk -F '=' '{print $2}')"
+check_telegram="$(grep -v '^#' "$config_file" | grep '^check_telegram=' | awk -F '=' '{print $2}')"
 set_server_name="$(grep -v '^#' "$config_file" | grep '^set_server_name=' | awk -F '=' '{print $2}')"
 set_account_name="$(grep -v '^#' "$config_file" | grep '^set_account_name=' | awk -F '=' '{print $2}')"
 set_telegram_token="$(grep -v '^#' "$config_file" | grep '^ set_telegram_token=' | awk -F '=' '{print $2}')"
@@ -350,24 +350,24 @@ fi
 # CHECK FOR TELEGRAM VARIABLE IF SET IN THE CONFIG FILE                                              #
 #----------------------------------------------------------------------------------------------------#
 
-if get_config_value alert_telegram
+if get_config_value check_telegram
 then
-  alert_telegram="$global_value"
+  check_telegram="$global_value"
 else
-  if grep "^alert_telegram" "$config_file" > /dev/null 2>&1
+  if grep "^check_telegram" "$config_file" > /dev/null 2>&1
   then
     echo ""
     if get_user_answer_yn "ENABLE TELEGRAM NOTIFICATIONS"
     then
-      alert_telegram=true
-      sed -i "s/alert_telegram=/alert_telegram=$alert_telegram/g" "$config_file"
+      check_telegram=true
+      sed -i "s/check_telegram=/check_telegram=$check_telegram/g" "$config_file"
     else
-      alert_telegram=false
-      sed -i "s/alert_telegram=/alert_telegram=$alert_telegram/g" "$config_file"
+      check_telegram=false
+      sed -i "s/check_telegram=/check_telegram=$check_telegram/g" "$config_file"
     fi
   fi
 fi
-if $alert_telegram
+if $check_telegram
 then
   if get_config_value set_telegram_token
   then
@@ -392,7 +392,7 @@ then
     fi
   fi
 fi
-if $alert_telegram
+if $check_telegram
 then
   if get_config_value warning_alert_threshold
   then
