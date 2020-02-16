@@ -18,8 +18,8 @@ fi
 # CONFIGURATION VARIABLES                                                                            #
 #----------------------------------------------------------------------------------------------------#
 
-second_date=$(date -d $now +%s)
-minute_date=$(date -d $now +%s%N)
+second_date=$(date -d $current_date +%s)
+minute_date=$(date -d $current_date +%s%N)
 current_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 max_queued_msg_lines="50"
 log_file="/root/remnode.log"
@@ -166,8 +166,6 @@ then
   echo "check_server=" >> "$config_file"
   echo "check_producer=" >> "$config_file"
   echo "check_telegram=" >> "$config_file"
-  echo "last_alert=2006-09-04" >> "$config_file"
-  echo "last_status=2006-09-04" >> "$config_file"
   echo "set_server_name=" >> "$config_file"
   echo "set_account_name=" >> "$config_file"
   echo "set_telegram_token=" >> "$config_file"
