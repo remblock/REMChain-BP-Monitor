@@ -320,7 +320,7 @@ else
   if grep "^check_producer" "$config_file" > /dev/null 2>&1
   then
     echo ""
-    if get_user_answer_yn "ENABLE CHECK FOR $(set_account_name^^)"
+    if get_user_answer_yn "ENABLE CHECK FOR ${set_account_name^^}"
     then
       check_producer=true
       sed -i "s/check_producer=/check_producer=$check_producer/g" "$config_file"
