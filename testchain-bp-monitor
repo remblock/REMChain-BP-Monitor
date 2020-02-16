@@ -422,7 +422,6 @@ fi
 #****************************************************************************************************#
 
 switch=$(cat "$state_file")
-status=`ps -efww | grep -w "testchain-bp-monitor" | grep -v grep | grep -v $$ | awk '{ print $2 }'`
 
 echo "======================================================================================="
 echo "BP-Monitor script is '$switch', to disable script set file '$state_file' to 'off'"
@@ -431,20 +430,17 @@ echo ""
 
 case "$switch" in
 
-on|On|ON) if [ -z "$status" ] 
+on|On|ON) if [ "$(echo $check_info | tr '[:upper:]' '[:lower:]' )" == "true" ]
           then
-            if [ "$(echo $check_info | tr '[:upper:]' '[:lower:]' )" == "true" ]
-            then
-              check_remcli_info
-            fi
-            if [ "$(echo $check_server | tr '[:upper:]' '[:lower:]' )" == "true" ]
-            then
-              check_ram_and_disk
-            fi
-            if [ "$(echo $check_producer | tr '[:upper:]' '[:lower:]' )" == "true" ]
-            then
-              check_produce_minutes
-            fi
+            check_remcli_info
+          fi
+          if [ "$(echo $check_server | tr '[:upper:]' '[:lower:]' )" == "true" ]
+          then
+            check_ram_and_disk
+          fi
+          if [ "$(echo $check_producer | tr '[:upper:]' '[:lower:]' )" == "true" ]
+          then
+            check_produce_minutes
           fi
         ;;
 
