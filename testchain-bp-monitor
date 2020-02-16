@@ -444,7 +444,7 @@ if [ ! -z "$warning_alert_threshold" ]
 then
   #Fix crontab to match time in warning_alert_threshold
   #Remove previous line of cron
-  crontab -u root -l | grep -v 'bpmonitor.sh'  | crontab -u root -
+  crontab -u root -l | grep -v 'testchain-bp-monitor'  | crontab -u root -
   #Add new line that matches desired interval time
  (crontab -u root -l ; echo "*/$warning_alert_threshold * * * * $cron_cmd") | crontab -u root -
 fi
