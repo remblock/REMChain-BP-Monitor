@@ -107,7 +107,7 @@ function get_config_value() {
 # FUNCTION TO CHECK REMCLI GET INFO RESPONSE                                                         #
 #----------------------------------------------------------------------------------------------------#
 
-function check_remcli_info(){
+function check_remcli_response(){
   if ! timeout 10s remcli get info 2>&1 | grep server_version &>/dev/null
   then
     curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_server_name has failed to receive a response from \"remcli get info\"" &>/dev/null
@@ -161,7 +161,7 @@ then
   echo "#Configuration file for the unregprod script" > "$config_file"
   echo "#Make the entries as variable=value" >> "$config_file"
   echo " " >> "$config_file"
-  echo "check_info=" >> "$config_file"
+  echo "check_remcli=" >> "$config_file"
   echo "check_server=" >> "$config_file"
   echo "check_producer=" >> "$config_file"
   echo "check_telegram=" >> "$config_file"
@@ -180,7 +180,7 @@ fi
 # GET CONFIGURATION FROM THE CONFIG FILE                                                             #
 #----------------------------------------------------------------------------------------------------#
 
-check_info="$(grep -v '^#' "$config_file" | grep '^check_info=' | awk -F '=' '{print $2}')"
+check_remcli="$(grep -v '^#' "$config_file" | grep '^check_remcli=' | awk -F '=' '{print $2}')"
 check_server="$(grep -v '^#' "$config_file" | grep '^check_server=' | awk -F '=' '{print $2}')"
 check_producer="$(grep -v '^#' "$config_file" | grep '^check_producer=' | awk -F '=' '{print $2}')"
 check_telegram="$(grep -v '^#' "$config_file" | grep '^check_telegram=' | awk -F '=' '{print $2}')"
@@ -244,20 +244,20 @@ fi
 # CHECK FOR REMCLI GET INFO VARIABLE IF SET IN THE CONFIG FILE                                       #
 #----------------------------------------------------------------------------------------------------#
 
-if get_config_value check_info
+if get_config_value check_remcli
 then
-  check_info="$global_value"
+  check_remcli="$global_value"
 else
-  if grep "^check_info" "$config_file" > /dev/null 2>&1
+  if grep "^check_remcli" "$config_file" > /dev/null 2>&1
   then
     echo ""
-    if get_user_answer_yn "ENABLE CHECK FOR REMCLI GET INFO"
+    if get_user_answer_yn "CHECK FOR REMCLI RESPONSE"
     then
-      check_info=true
-      sed -i "s/check_info=/check_info=$check_info/g" "$config_file"
+      check_remcli=true
+      sed -i "s/check_remcli=/check_remcli=$check_remcli/g" "$config_file"
     else
-      check_info=false
-      sed -i "s/check_info=/check_info=$check_info/g" "$config_file"
+      check_remcli=false
+      sed -i "s/check_remcli=/check_remcli=$check_remcli/g" "$config_file"
     fi
   fi
 fi
@@ -430,9 +430,9 @@ echo ""
 
 case "$switch" in
 
-on|On|ON) if [ "$(echo $check_info | tr '[:upper:]' '[:lower:]' )" == "true" ]
+on|On|ON) if [ "$(echo $check_remcli | tr '[:upper:]' '[:lower:]' )" == "true" ]
           then
-            check_remcli_info
+            check_remcli_response
           fi
           if [ "$(echo $check_server | tr '[:upper:]' '[:lower:]' )" == "true" ]
           then
