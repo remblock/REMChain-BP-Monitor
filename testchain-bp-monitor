@@ -110,7 +110,7 @@ function get_config_value() {
 function check_remcli_response(){
   if ! timeout 10s remcli get info 2>&1 | grep server_version &>/dev/null
   then
-    curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_server_name has failed to receive a response from \"remcli get info\"" &>/dev/null
+    curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_server_name has failed to receive a response from remcli" &>/dev/null
   fi
 }
 
