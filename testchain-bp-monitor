@@ -20,13 +20,14 @@ fi
 
 max_queued_msg_lines="50"
 log_file="/root/remnode.log"
-swap_file="/root/swap.alert"
-oracle_file="/root/oracle.alert"
 state_file="/root/check-bp-monitor"
 create_dir="/root/remblock/bp-monitor"
 current_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 second_date=$(date -d $current_date +%s)
 config_file="/root/remblock/bp-monitor/config"
+swap_file="/root/remblock/bp-monitor/swap.alert"
+oracle_file="/root/remblock/bp-monitor/oracle.alert"
+last_block_file="/root/remblock/bp-monitor/block.alert"
 temp_dir="/root/remblock/bp-monitor/bp-monitor-temp"
 cron_cmd="/root/remblock/bp-monitor/testchain-bp-monitor"
 PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
@@ -169,7 +170,7 @@ function check_producer_oracle(){
 
 function check_producer_last_block(){
   last_log_block_date=$(cat -v $log_file | grep "signed by $set_account_name" | sed -n '$p' | awk '{print $2}')
-  last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $set_account_name -U $set_account_name | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+  last_remcli_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $set_account_name -U $set_account_name | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
   active=$(remcli -u https://testchain.remme.io get table rem rem producers -L $set_account_name -U $set_account_name | grep 'is_active' | awk '{print $2}' | tr -d '"' | tr -d ',')
   if [ -z "$active" ]
   then
@@ -177,20 +178,33 @@ function check_producer_last_block(){
   fi
   if [ -z "$last_block_date" ]
   then
-    last_block_date=$(remcli get table rem rem producers -L $set_account_name -U $set_account_name | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+    last_remcli_block_date=$(remcli get table rem rem producers -L $set_account_name -U $set_account_name | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
   fi
-  last_block=$(remnodelogtime_to_date "$last_block_date")
+  last_block=$(remnodelogtime_to_date "$last_remcli_block_date")
   current_minutes=$(( ($second_date - $last_block) / 60 ))
+  current_seconds=$(( ($second_date - $last_block) ))
   last_log_block=$(remnodelogtime_to_date "$last_log_block_date")
-  config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
-  if (( ($second_date - $last_block) >= $config_minutes_in_seconds ))
+  last_block_in_seconds=$(( (set_last_produce_minutes * 60) ))
+  warning_alert_in_seconds=$(( (warning_alert_threshold * 60) ))
+  warning_plus_block_seconds=$(( (warning_alert_in_seconds + warning_alert_in_seconds) ))
+  
+  if [[ "$second_date - $last_block" -ge "$last_block_in_seconds" ]]
   then
-    if (( ($second_date - $last_log_block) >= $config_minutes_in_seconds ))
+    if [[ "$second_date - $last_log_block" -ge "$last_block_in_seconds" ]]
     then
       if [ "$active" -eq "1" ]
       then
+        if [[ "$warning_alert_in_seconds second_date
         curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_account_name has stopped producing blocks for $current_minutes minutes." &>/dev/null
+        touch block.alert
       fi
+    fi
+  fi
+  if [ -f "$block_file" ]
+  then
+    if [[ "$second_date - $last_block" -le "3900" ]]
+    then
+      rm $block_file
     fi
   fi
 }
