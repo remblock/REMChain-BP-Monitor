@@ -21,6 +21,7 @@ fi
 max_queued_msg_lines="50"
 log_file="/root/remnode.log"
 swap_file="/root/swap.alert"
+oracle_file="/root/oracle.alert"
 state_file="/root/check-bp-monitor"
 create_dir="/root/remblock/bp-monitor"
 current_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -143,13 +144,22 @@ function check_producer_swap(){
 #----------------------------------------------------------------------------------------------------#
 
 function check_producer_oracle(){
-  producer_oracle=$(remcli -u https://testchain.remme.io get table rem.oracle rem.oracle pricedata -L $set_account_name -U $set_account_name)
+  last_oracle_date=$(remcli -u https://testchain.remme.io get table rem.oracle rem.oracle pricedata -L $set_account_name -U $set_account_name | grep 'last_update' | awk '{print $2}' | tr -d '"')
   last_oracle=$(remnodelogtime_to_date "$last_oracle_date")
-  current_minutes=$(( ($second_date - $last_block) / 60 ))
-  config_minutes_in_seconds=$(( (set_last_produce_minutes * 60) ))
-  if (( ($second_date - $last_block) >= $config_minutes_in_seconds ))
+  if [ ! -f "$oracle_file" ]
   then
-    curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_account_name has stopped producing blocks for $current_minutes minutes." &>/dev/null
+    if [[ "$second_date - $last_oracle" -ge "3900" ]]
+    then
+      curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_account_name has stopped performing oracle actions." &>/dev/null
+      touch oracle.alert
+    fi
+  fi
+  if [ -f "$oracle_file" ]
+  then
+    if [[ "$second_date - $last_oracle" -le "3900" ]]
+    then
+      rm $oracle_file
+    fi
   fi
 }
 
