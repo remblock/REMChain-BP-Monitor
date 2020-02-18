@@ -339,7 +339,7 @@ else
   if grep "^check_server" "$config_file" > /dev/null 2>&1
   then
     echo ""
-    if get_user_answer_yn "ENABLE CHECK FOR SERVER CONDITION"
+    if get_user_answer_yn "CHECK SERVER RAM AND DISK SPACE"
     then
       check_server=true
       sed -i "s/check_server=/check_server=$check_server/g" "$config_file"
@@ -386,7 +386,7 @@ else
   if grep "^check_producer" "$config_file" > /dev/null 2>&1
   then
     echo ""
-    if get_user_answer_yn "ENABLE CHECK FOR ${set_account_name^^}"
+    if get_user_answer_yn "MONITOR ${set_account_name^^} FOR LAST BLOCK, SWAP AND ORACLE ACTIONS"
     then
       check_producer=true
       sed -i "s/check_producer=/check_producer=$check_producer/g" "$config_file"
@@ -405,7 +405,7 @@ then
     if grep "^set_last_produce_minutes" "$config_file" > /dev/null 2>&1
     then
       echo ""
-      read -p "MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e set_last_produce_minutes
+      read -p "MINTUES TO MONITOR IF ${set_account_name^^} IS NOT PRODUCING?: " -e set_last_produce_minutes
       sed -i "s/set_last_produce_minutes=/set_last_produce_minutes=$set_last_produce_minutes/g" "$config_file"
     fi
   fi
