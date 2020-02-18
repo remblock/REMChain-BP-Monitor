@@ -127,7 +127,7 @@ function check_producer_swap(){
     if [[ ! "$producer_swap" == "$set_account_name" ]]
     then 
       curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_account_name has stopped performing swap actions." &>/dev/null
-      touch swap.alert
+      touch $swap_file
     fi
   fi
   if [ -f "$swap_file" ]
@@ -151,7 +151,7 @@ function check_producer_oracle(){
     if [[ "$second_date - $last_oracle" -ge "3900" ]]
     then
       curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_account_name has stopped performing oracle actions." &>/dev/null
-      touch oracle.alert
+      touch $oracle_file
     fi
   fi
   if [ -f "$oracle_file" ]
