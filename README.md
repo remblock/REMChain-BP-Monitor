@@ -1,7 +1,7 @@
 # REMChain-BP-Monitor
 
-#### This script will monitor to see if the block producer is producing blocks within the specified timeframe, if the block producer fails to producer a block a telegram notifcation will be sent. The timeframe can be adjusted according to the block producers tolerance/preference.
-
+#### This script monitors to see whether the producer is producing blocks within a specified period, while ensuing any missed swap or oracle actions get notified through telegram. 
+ 
 ***
 
 ### Setup BP-Monitor:
