@@ -27,7 +27,6 @@ second_date=$(date -d $current_date +%s)
 config_file="/root/remblock/bp-monitor/config"
 swap_file="/root/remblock/bp-monitor/swap.alert"
 oracle_file="/root/remblock/bp-monitor/oracle.alert"
-last_block_file="/root/remblock/bp-monitor/block.alert"
 temp_dir="/root/remblock/bp-monitor/bp-monitor-temp"
 cron_cmd="/root/remblock/bp-monitor/testchain-bp-monitor"
 PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
