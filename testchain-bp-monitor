@@ -20,7 +20,7 @@ fi
 
 max_queued_msg_lines="50"
 log_file="/root/remnode.log"
-swap_file="/root/swap_alert"
+swap_file="/root/swap.alert"
 state_file="/root/check-bp-monitor"
 create_dir="/root/remblock/bp-monitor"
 current_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
