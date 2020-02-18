@@ -182,7 +182,7 @@ function check_producer_last_block(){
   last_block=$(remnodelogtime_to_date "$last_remcli_block_date")
   last_log_block=$(remnodelogtime_to_date "$last_log_block_date")
   current_minutes=$(( ($second_date - $last_block) / 60 ))
-  last_block_in_seconds=$(( (set_last_produce_minutes * 60) ))
+  last_block_in_seconds=$(( (set_last_produce_minutes * 60) - 60 ))
   if [[ "$second_date - $last_block" -ge "$last_block_in_seconds" ]]
   then
     if [[ "$second_date - $last_log_block" -ge "$last_block_in_seconds" ]]
