@@ -149,13 +149,30 @@ function check_producer_oracle(){
 #----------------------------------------------------------------------------------------------------#
 
 function check_producer_last_block(){
+  last_log_block_date=$(cat -v $log_file | grep "signed by $set_account_name" | sed -n '$p' | awk '{print $2}')
   last_block_date=$(remcli -u https://testchain.remme.io get table rem rem producers -L $set_account_name -U $set_account_name | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+  active=$(remcli -u https://testchain.remme.io get table rem rem producers -L $set_account_name -U $set_account_name | grep 'is_active' | awk '{print $2}' | tr -d '"' | tr -d ',')
+  if [ -z "$active" ]
+  then
+    active=$(remcli get table rem rem producers -L $set_account_name -U $set_account_name | grep 'is_active' | awk '{print $2}' | tr -d '"' | tr -d ',')
+  fi
+  if [ -z "$last_block_date" ]
+  then
+    last_block_date=$(remcli get table rem rem producers -L $set_account_name -U $set_account_name | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+  fi
   last_block=$(remnodelogtime_to_date "$last_block_date")
   current_minutes=$(( ($second_date - $last_block) / 60 ))
-  config_minutes_in_seconds=$(( (set_last_produce_minutes * 60) ))
+  last_log_block=$(remnodelogtime_to_date "$last_log_block_date")
+  config_minutes_in_seconds=$(( (check_last_block_minutes * 60) ))
   if (( ($second_date - $last_block) >= $config_minutes_in_seconds ))
   then
-    curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_account_name has stopped producing blocks for $current_minutes minutes." &>/dev/null
+    if (( ($second_date - $last_log_block) >= $config_minutes_in_seconds ))
+    then
+      if [ "$active" -eq "1" ]
+      then
+        curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_account_name has stopped producing blocks for $current_minutes minutes." &>/dev/null
+      fi
+    fi
   fi
 }
 
