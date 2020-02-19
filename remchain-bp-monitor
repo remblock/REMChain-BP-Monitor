@@ -121,11 +121,11 @@ function check_remcli_response(){
 #----------------------------------------------------------------------------------------------------#
 
 function check_producer_swap(){
-  producer_swap=$(remcli get table rem.swap rem.swap swaps -r -l 1 | grep -o "$set_account_name") 
+  producer_swap=$(remcli get table rem.swap rem.swap swaps -r -l 1 | grep -o "$set_account_name")
   if [ ! -f "$swap_file" ]
   then
     if [[ ! "$producer_swap" == "$set_account_name" ]]
-    then 
+    then
       curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_account_name has stopped performing swap actions." &>/dev/null
       touch $swap_file
     fi
@@ -210,7 +210,7 @@ function check_ram_and_disk(){
   fi
   if (( disk_used_percertage >= max_disk ))
   then
-    curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_server_name disk usage is over the specified threshold amount." &>/dev/null  
+    curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_server_name disk usage is over the specified threshold amount." &>/dev/null
   fi
 }
 
@@ -506,7 +506,7 @@ on|On|ON) if [ "$(echo $check_remcli | tr '[:upper:]' '[:lower:]' )" == "true" ]
           if [ "$(echo $check_producer | tr '[:upper:]' '[:lower:]' )" == "true" ]
           then
             check_producer_swap
-            check_producer_oracle 
+            check_producer_oracle
             check_producer_last_block
           fi
         ;;
