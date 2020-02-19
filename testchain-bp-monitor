@@ -488,9 +488,9 @@ fi
 
 switch=$(cat "$state_file")
 
-echo "======================================================================================="
-echo "BP-Monitor script is '$switch', to disable script set file '$state_file' to 'off'"
-echo "======================================================================================="
+echo "======================================================================================"
+echo "BP-Monitor script is '$switch' to disable script set file '$state_file' to 'off'"
+echo "======================================================================================"
 echo ""
 
 case "$switch" in
