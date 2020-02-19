@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #****************************************************************************************************#
-#                                        REMCHAIN-BP-MONITOR                                         #
+#                                         REMCHAIN-BP-MONITOR                                        #
 #****************************************************************************************************#
 
 #----------------------------------------------------------------------------------------------------#
@@ -18,22 +18,18 @@ fi
 # CONFIGURATION VARIABLES                                                                            #
 #----------------------------------------------------------------------------------------------------#
 
-now_epoch="$(date +%s)"
+max_queued_msg_lines="50"
+log_file="/root/remnode.log"
 state_file="/root/check-bp-monitor"
 create_dir="/root/remblock/bp-monitor"
+current_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+second_date=$(date -d $current_date +%s)
 config_file="/root/remblock/bp-monitor/config"
-cron_cmd="/root/remblock/bp-monitor/bp-monitor"
-bp_monitor_script_path="/root/remblock/bp-monitor/bp-monitor"
+swap_file="/root/remblock/bp-monitor/swap.alert"
+oracle_file="/root/remblock/bp-monitor/oracle.alert"
+temp_dir="/root/remblock/bp-monitor/bp-monitor-temp"
+cron_cmd="/root/remblock/bp-monitor/remchain-bp-monitor"
 PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
-
-#----------------------------------------------------------------------------------------------------#
-# REMOVE EXISTING CRONTAB LINE IF IT EXIST WHILE CONFIG DOESN'T                                      #
-#----------------------------------------------------------------------------------------------------#
-
-if [ ! -f "$config_file" ]
-then
-crontab -u root -l | grep -v ^# | grep -v "$cron_cmd" | crontab -u root -
-fi
 
 #----------------------------------------------------------------------------------------------------#
 # CREATE DIRECTORY IF IT DOESN'T EXIST                                                               #
@@ -46,7 +42,40 @@ then
 fi
 
 #----------------------------------------------------------------------------------------------------#
-# GET YES OR NO ANSWER FROM USER                                                                     #
+# CREATE STATE FILE IF IT DOESN'T EXIST                                                              #
+#----------------------------------------------------------------------------------------------------#
+
+if [ ! -f "$state_file" ]
+then
+cat > "$state_file" << 'DOC'
+on
+DOC
+fi
+
+#-----------------------------------------------------------------------------------------------------
+# SCHEDULE CRON FOR THE BP MONITOR SCRIPT
+#-----------------------------------------------------------------------------------------------------
+
+if ! crontab -l | grep -q "remchain-bp-monitor"
+then
+  (crontab -l ; echo "* * * * * $create_dir/remchain-bp-monitor >> $create_dir/${SCRIPT_LOG_FILE} 2>&1") | crontab -
+fi
+
+#****************************************************************************************************#
+#                                            FUNCTIONS                                               #
+#****************************************************************************************************#
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO TRANSLATE THE TIME FORMAT FROM REMCLI FORMATE TO EPOCH TIME                            #
+#----------------------------------------------------------------------------------------------------#
+
+function remnodelogtime_to_date() {
+  temp_date="$( echo $1 | awk -F '.' '{ print $1}' | tr '-' '/' | tr 'T' ' ')"
+  echo $(date "+%s" -d "$temp_date")
+}
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO GET YES OR NO ANSWER FROM USER                                                         #
 #----------------------------------------------------------------------------------------------------#
 
 function get_user_answer_yn(){
@@ -63,7 +92,7 @@ function get_user_answer_yn(){
 }
 
 #----------------------------------------------------------------------------------------------------#
-# GET VALUE FROM THE CONFIG FILE, RETURN IT WITH THE VARIABLE "global_value"                         #
+# FUNCTION TO GET VALUE FROM THE CONFIG FILE AND RETURN IT WITH THE VARIABLE "global_value"          #
 #----------------------------------------------------------------------------------------------------#
 
 function get_config_value() {
@@ -77,6 +106,119 @@ function get_config_value() {
 }
 
 #----------------------------------------------------------------------------------------------------#
+# FUNCTION TO CHECK REMCLI GET INFO RESPONSE                                                         #
+#----------------------------------------------------------------------------------------------------#
+
+function check_remcli_response(){
+  if ! timeout 10s remcli get info 2>&1 | grep server_version &>/dev/null
+  then
+    curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_server_name has failed to receive a response from remcli" &>/dev/null
+  fi
+}
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO CHECK WHETHER PRODUCER IS MISSING SWAP ACTION                                          #
+#----------------------------------------------------------------------------------------------------#
+
+function check_producer_swap(){
+  producer_swap=$(remcli get table rem.swap rem.swap swaps -r -l 1 | grep -o "$set_account_name") 
+  if [ ! -f "$swap_file" ]
+  then
+    if [[ ! "$producer_swap" == "$set_account_name" ]]
+    then 
+      curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_account_name has stopped performing swap actions." &>/dev/null
+      touch $swap_file
+    fi
+  fi
+  if [ -f "$swap_file" ]
+  then
+    if [[ "$producer_swap" == "$set_account_name" ]]
+    then
+      rm $swap_file
+    fi
+  fi
+}
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO CHECK WHETHER PRODUCER IS MISSING ORACLE ACTION                                        #
+#----------------------------------------------------------------------------------------------------#
+
+function check_producer_oracle(){
+  last_oracle_date=$(remcli -u https://remchain.remme.io get table rem.oracle rem.oracle pricedata -L $set_account_name -U $set_account_name | grep 'last_update' | awk '{print $2}' | tr -d '"')
+  last_oracle=$(remnodelogtime_to_date "$last_oracle_date")
+  if [ ! -f "$oracle_file" ]
+  then
+    if [[ "$second_date - $last_oracle" -ge "3900" ]]
+    then
+      curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_account_name has stopped performing oracle actions." &>/dev/null
+      touch $oracle_file
+    fi
+  fi
+  if [ -f "$oracle_file" ]
+  then
+    if [[ "$second_date - $last_oracle" -le "3900" ]]
+    then
+      rm $oracle_file
+    fi
+  fi
+}
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO CHECK WHETHER PRODUCER IS PRODUCING BLOCKS                                             #
+#----------------------------------------------------------------------------------------------------#
+
+function check_producer_last_block(){
+  last_log_block_date=$(cat -v $log_file | grep "signed by $set_account_name" | sed -n '$p' | awk '{print $2}')
+  last_remcli_block_date=$(remcli -u https://remchain.remme.io get table rem rem producers -L $set_account_name -U $set_account_name | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+  active=$(remcli -u https://remchain.remme.io get table rem rem producers -L $set_account_name -U $set_account_name | grep 'is_active' | awk '{print $2}' | tr -d '"' | tr -d ',')
+  if [ -z "$active" ]
+  then
+    active=$(remcli get table rem rem producers -L $set_account_name -U $set_account_name | grep 'is_active' | awk '{print $2}' | tr -d '"' | tr -d ',')
+  fi
+  if [ -z "$last_block_date" ]
+  then
+    last_remcli_block_date=$(remcli get table rem rem producers -L $set_account_name -U $set_account_name | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
+  fi
+  last_block=$(remnodelogtime_to_date "$last_remcli_block_date")
+  last_log_block=$(remnodelogtime_to_date "$last_log_block_date")
+  current_minutes=$(( ($second_date - $last_block) / 60 ))
+  last_block_in_seconds=$(( (set_last_produce_minutes * 60) ))
+  if [[ "$second_date - $last_block" -ge "$last_block_in_seconds" ]]
+  then
+    if [[ "$second_date - $last_log_block" -ge "$last_block_in_seconds" ]]
+    then
+      if [ "$active" -eq "1" ]
+      then
+        curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_account_name has stopped producing blocks for $current_minutes minutes." &>/dev/null
+      fi
+    fi
+  fi
+}
+
+#----------------------------------------------------------------------------------------------------#
+# FUNCTION TO CHECK RAM AND DISK SPACE                                                               #
+#----------------------------------------------------------------------------------------------------#
+
+function check_ram_and_disk(){
+  ram_used_percertage="$(free | grep Mem | awk '{print $3/$2 * 100.0}' | awk -F '.' '{print $1}')"
+  max_ram="$(echo $ram_usage_threshold | tr -d '%' )"
+  disk_used_percertage="$(df -h | grep -w '/' | awk '{print $5}' | tr -d '%')"
+  max_disk="$(echo $disk_space_threshold | tr -d '%' )"
+  if (( ram_used_percertage >= max_ram ))
+  then
+    curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_server_name ram usage is over the specified threshold amount." &>/dev/null
+  fi
+  if (( disk_used_percertage >= max_disk ))
+  then
+    curl -s -X POST https://api.telegram.org/bot$set_telegram_token/sendMessage -d chat_id=$set_telegram_chatid -d text="$set_server_name disk usage is over the specified threshold amount." &>/dev/null  
+  fi
+}
+
+#****************************************************************************************************#
+#                                          CONFIG VARIABLES                                          #
+#****************************************************************************************************#
+
+#----------------------------------------------------------------------------------------------------#
 # CREATE CONFIG FILE IF IT DOESN'T EXIST                                                             #
 #----------------------------------------------------------------------------------------------------#
 
@@ -85,144 +227,265 @@ then
   echo "#Configuration file for the unregprod script" > "$config_file"
   echo "#Make the entries as variable=value" >> "$config_file"
   echo " " >> "$config_file"
+  echo "check_remcli=" >> "$config_file"
+  echo "check_server=" >> "$config_file"
+  echo "check_producer=" >> "$config_file"
+  echo "check_telegram=" >> "$config_file"
+  echo "set_server_name=" >> "$config_file"
+  echo "set_account_name=" >> "$config_file"
+  echo "set_telegram_token=" >> "$config_file"
+  echo "set_telegram_chatid=" >> "$config_file"
+  echo "ram_usage_threshold=" >> "$config_file"
+  echo "disk_space_threshold=" >> "$config_file"
+  echo "warning_alert_threshold=" >> "$config_file"
+  echo "set_last_produce_minutes=" >> "$config_file"
+  echo " " >> "$config_file"
 fi
 
 #----------------------------------------------------------------------------------------------------#
-# CREATES THE CHECK BP MONITOR SCRIPT IF IT DOESN'T EXIST                                            #
+# GET CONFIGURATION FROM THE CONFIG FILE                                                             #
 #----------------------------------------------------------------------------------------------------#
 
-if [ ! -f "$state_file" ]
-then
-cat > "$state_file" << 'DOC'
-on
-DOC
-fi
+check_remcli="$(grep -v '^#' "$config_file" | grep '^check_remcli=' | awk -F '=' '{print $2}')"
+check_server="$(grep -v '^#' "$config_file" | grep '^check_server=' | awk -F '=' '{print $2}')"
+check_producer="$(grep -v '^#' "$config_file" | grep '^check_producer=' | awk -F '=' '{print $2}')"
+check_telegram="$(grep -v '^#' "$config_file" | grep '^check_telegram=' | awk -F '=' '{print $2}')"
+set_server_name="$(grep -v '^#' "$config_file" | grep '^set_server_name=' | awk -F '=' '{print $2}')"
+set_account_name="$(grep -v '^#' "$config_file" | grep '^set_account_name=' | awk -F '=' '{print $2}')"
+set_telegram_token="$(grep -v '^#' "$config_file" | grep '^ set_telegram_token=' | awk -F '=' '{print $2}')"
+set_telegram_chatid="$(grep -v '^#' "$config_file" | grep '^set_telegram_chatid=' | awk -F '=' '{print $2}')"
+ram_usage_threshold="$(grep -v '^#' "$config_file" | grep '^ram_usage_threshold=' | awk -F '=' '{print $2}')"
+disk_space_threshold="$(grep -v '^#' "$config_file" | grep '^disk_space_threshold=' | awk -F '=' '{print $2}')"
+warning_alert_threshold="$(grep -v '^#' "$config_file" | grep '^warning_alert_threshold=' | awk -F '=' '{print $2}')"
+set_last_produce_minutes="$(grep -v '^#' "$config_file" | grep '^set_last_produce_minutes=' | awk -F '=' '{print $2}')"
 
 #****************************************************************************************************#
-#                                   GETTING POSSIBLE MISSING VALUE                                   #
+#                                       GETTING USER VARIABLES                                       #
 #****************************************************************************************************#
 
 #----------------------------------------------------------------------------------------------------#
-# GET PRODUCER NAME IF NOT ALREADY ON THE CONFIG FILE                                                #
+# CHECK FOR SERVER NAME IF SET IN THE CONFIG FILE                                                    #
 #----------------------------------------------------------------------------------------------------#
 
-if get_config_value accountname
+if get_config_value set_server_name
 then
-  accountname="$global_value"
+  set_server_name="$global_value"
 else
-  if ! grep "^accountname" "$config_file" > /dev/null 2>&1
-  then
-    accountname=$(cat config/config.ini | grep 'producer-name' | awk '{print $3}')
-    printf -- "%s\n" "accountname=$accountname" >> "$config_file"
-  else
-    accountname=$(cat config/config.ini | grep 'producer-name' | awk '{print $3}')
-    sed -i "s/accountname=/accountname=$accountname/g" "$config_file"
-  fi
-fi
-if grep "^accountname" "$config_file" > /dev/null 2>&1
-then
-  if [ -z "$accountname" ]
+  if grep "^set_server_name" "$config_file" > /dev/null 2>&1
   then
     echo ""
-    read -p "ENTER YOUR PRODUCER NAME: " -e accountname
-    sed -i "s/accountname=/accountname=$accountname/g" "$config_file"
+    read -p "ENTER YOUR SERVER NAME?: " -e set_server_name
+    sed -i "s/set_server_name=/set_server_name=$set_server_name/g" "$config_file"
+  else
+    set_server_name="Server 1"
+    sed -i "s/set_server_name=/set_server_name=$set_server_name/g" "$config_file"
   fi
 fi
 
 #----------------------------------------------------------------------------------------------------#
-# GET TELEGRAM DATA IF NOT ALREADY ON THE CONFIG FILE                                                #
+# CHECK FOR PRODUCER NAME IF SET IN THE CONFIG FILE                                                  #
 #----------------------------------------------------------------------------------------------------#
 
-if get_config_value telegram_enabled
+if get_config_value set_account_name
 then
-  telegram_enabled="$global_value"
-elif ! grep "^telegram_enabled" "$config_file" > /dev/null 2>&1
-then
-  echo ""
-  if get_user_answer_yn "ENABLE TELEGRAM NOTIFICATIONS"
+  set_account_name="$global_value"
+else
+  if grep "^set_account_name" "$config_file" > /dev/null 2>&1
   then
-    telegram_enabled=true
-    printf -- "%s\n" "telegram_enabled=$telegram_enabled" >> "$config_file"
-  else
-    telegram_enabled=false
-    printf -- "%s\n" "telegram_enabled=$telegram_enabled" >> "$config_file"
+    set_account_name=$(cat config/config.ini | grep 'producer-name' | awk '{print $3}')
+    sed -i "s/set_account_name=/set_account_name=$set_account_name/g" "$config_file"
   fi
 fi
-if $telegram_enabled
+if grep "^set_account_name" "$config_file" > /dev/null 2>&1
 then
-  if get_config_value telegram_token
+  if [ -z "$set_account_name" ]
   then
-    telegram_token="$global_value"
-  else
-    if ! grep "^telegram_token" "$config_file" > /dev/null 2>&1
+    echo ""
+    read -p "ENTER YOUR PRODUCER NAME: " -e set_account_name
+    sed -i "s/set_account_name=/set_account_name=$set_account_name/g" "$config_file"
+  fi
+fi
+
+#----------------------------------------------------------------------------------------------------#
+# CHECK FOR REMCLI GET INFO VARIABLE IF SET IN THE CONFIG FILE                                       #
+#----------------------------------------------------------------------------------------------------#
+
+if get_config_value check_remcli
+then
+  check_remcli="$global_value"
+else
+  if grep "^check_remcli" "$config_file" > /dev/null 2>&1
+  then
+    echo ""
+    if get_user_answer_yn "CHECK FOR REMCLI RESPONSE"
     then
-      echo ""
-      read -p "ENTER YOUR TELEGRAM TOKEN API: " -e telegram_token
-      printf -- "%s\n" "telegram_token=$telegram_token" >> "$config_file"
+      check_remcli=true
+      sed -i "s/check_remcli=/check_remcli=$check_remcli/g" "$config_file"
     else
-      sed -i "s/telegram_token=/telegram_token=$telegram_token/g" "$config_file"
+      check_remcli=false
+      sed -i "s/check_remcli=/check_remcli=$check_remcli/g" "$config_file"
     fi
   fi
-  if get_config_value telegram_chatid
+fi
+
+#----------------------------------------------------------------------------------------------------#
+# CHECK FOR SERVER CONDITION VARIABLE IF SET IN THE CONFIG FILE                                      #
+#----------------------------------------------------------------------------------------------------#
+
+if get_config_value check_server
+then
+  check_server="$global_value"
+else
+  if grep "^check_server" "$config_file" > /dev/null 2>&1
   then
-    telegram_chatid="$global_value"
+    echo ""
+    if get_user_answer_yn "CHECK SERVER RAM AND DISK SPACE"
+    then
+      check_server=true
+      sed -i "s/check_server=/check_server=$check_server/g" "$config_file"
+    else
+      check_server=false
+      sed -i "s/check_server=/check_server=$check_server/g" "$config_file"
+    fi
+  fi
+fi
+if $check_server
+then
+  if get_config_value ram_usage_threshold
+  then
+    ram_usage_threshold="$global_value"
   else
-    if ! grep "^telegram_chatid" "$config_file" > /dev/null 2>&1
+    if grep "^ram_usage_threshold" "$config_file" > /dev/null 2>&1
     then
       echo ""
-      read -p "ENTER YOUR TELEGRAM CHAT ID: " -e telegram_chatid
-      printf -- "%s\n" "telegram_chatid=$telegram_chatid" >> "$config_file"
-    else
-      sed -i "s/telegram_token=/telegram_token=$telegram_token/g" "$config_file"
+      read -p "ENTER YOUR RAM THRESHOLD PERCENTAGE: " -e ram_usage_threshold
+      sed -i "s/ram_usage_threshold=/ram_usage_threshold=$ram_usage_threshold/g" "$config_file"
+    fi
+  fi
+  if get_config_value disk_space_threshold
+  then
+    disk_space_threshold="$global_value"
+  else
+    if grep "^disk_space_threshold" "$config_file" > /dev/null 2>&1
+    then
+      echo ""
+      read -p "ENTER YOUR DISK THRESHOLD PERCENTAGE: " -e disk_space_threshold
+      sed -i "s/disk_space_threshold=/disk_space_threshold=$disk_space_threshold/g" "$config_file"
     fi
   fi
 fi
 
 #----------------------------------------------------------------------------------------------------#
-# USER BLOCK MINUTE VALUE IF NOT SET IN THE CONFIG FILE                                              #
+# CHECK FOR PRODUCER VARIABLE IF SET IN THE CONFIG FILE                                              #
 #----------------------------------------------------------------------------------------------------#
 
-if get_config_value check_last_block_minutes
+if get_config_value check_producer
 then
-  check_last_block_minutes="$global_value"
+  check_producer="$global_value"
 else
-  if ! grep "^check_last_block_minutes" "$config_file" > /dev/null 2>&1
+  if grep "^check_producer" "$config_file" > /dev/null 2>&1
   then
     echo ""
-    read -p "ENTER MINTUES TO MONITOR IF YOU'RE NOT PRODUCING?: " -e check_last_block_minutes
-    echo ""
-    printf -- "%s\n" "check_last_block_minutes=$check_last_block_minutes" >> "$config_file"
+    if get_user_answer_yn "MONITOR ${set_account_name^^} FOR LAST BLOCK, SWAP AND ORACLE ACTIONS"
+    then
+      check_producer=true
+      sed -i "s/check_producer=/check_producer=$check_producer/g" "$config_file"
+    else
+      check_producer=false
+      sed -i "s/check_producer=/check_producer=$check_producer/g" "$config_file"
+    fi
+  fi
+fi
+if $check_producer
+then
+  if get_config_value set_last_produce_minutes
+  then
+    set_last_produce_minutes="$global_value"
   else
-    check_last_block_minutes=6
-    sed -i "s/check_last_block_minutes=/check_last_block_minutes=$check_last_block_minutes/g" "$config_file"
+    if grep "^set_last_produce_minutes" "$config_file" > /dev/null 2>&1
+    then
+      echo ""
+      read -p "MINTUES TO MONITOR IF ${set_account_name^^} IS NOT PRODUCING?: " -e set_last_produce_minutes
+      sed -i "s/set_last_produce_minutes=/set_last_produce_minutes=$set_last_produce_minutes/g" "$config_file"
+    fi
   fi
 fi
 
-#****************************************************************************************************#
-#                                       FUNCTIONS DEFINITIONS                                        #
-#****************************************************************************************************#
-
 #----------------------------------------------------------------------------------------------------#
-# INSTALL CRONTAB LINE IF IT DOESN'T EXIST                                                           #
+# CHECK FOR TELEGRAM VARIABLE IF SET IN THE CONFIG FILE                                              #
 #----------------------------------------------------------------------------------------------------#
 
-if [ ! -z "$cron_cmd" ] && ! crontab -u root -l | grep -v '^ *#' | grep "$cron_cmd" &>/dev/null
+if get_config_value check_telegram
 then
-  (crontab -u root -l ; echo "*/1 * * * * $cron_cmd") | crontab -u root -
+  check_telegram="$global_value"
+else
+  if grep "^check_telegram" "$config_file" > /dev/null 2>&1
+  then
+    echo ""
+    if get_user_answer_yn "ENABLE TELEGRAM NOTIFICATIONS"
+    then
+      check_telegram=true
+      sed -i "s/check_telegram=/check_telegram=$check_telegram/g" "$config_file"
+    else
+      check_telegram=false
+      sed -i "s/check_telegram=/check_telegram=$check_telegram/g" "$config_file"
+    fi
+  fi
+fi
+if $check_telegram
+then
+  if get_config_value set_telegram_token
+  then
+    set_telegram_token="$global_value"
+  else
+    if grep "^set_telegram_token" "$config_file" > /dev/null 2>&1
+    then
+      echo ""
+      read -p "ENTER YOUR TELEGRAM TOKEN API: " -e set_telegram_token
+      sed -i "s/set_telegram_token=/set_telegram_token=$set_telegram_token/g" "$config_file"
+    fi
+  fi
+  if get_config_value set_telegram_chatid
+  then
+    set_telegram_chatid="$global_value"
+  else
+    if grep "^set_telegram_chatid" "$config_file" > /dev/null 2>&1
+    then
+      echo ""
+      read -p "ENTER YOUR TELEGRAM CHAT ID: " -e set_telegram_chatid
+      sed -i "s/set_telegram_chatid=/set_telegram_chatid=$set_telegram_chatid/g" "$config_file"
+    fi
+  fi
+fi
+if $check_telegram
+then
+  if get_config_value warning_alert_threshold
+  then
+    warning_alert_threshold="$global_value"
+  else
+    if grep "^warning_alert_threshold" "$config_file" > /dev/null 2>&1
+    then
+      echo ""
+      read -p "ENTER YOUR ALERT THRESHOLD MINUTE: " -e warning_alert_threshold
+      sed -i "s/warning_alert_threshold=/warning_alert_threshold=$warning_alert_threshold/g" "$config_file"
+      echo ""
+    fi
+  fi
 fi
 
 #----------------------------------------------------------------------------------------------------#
-# TRANSLATE THE TIME FORMAT FROM REMCLI FORMATE TO EPOCH TIME                                        #
+# GET VARIABLES FROM THE CONFIG SOURCE                                                               #
 #----------------------------------------------------------------------------------------------------#
 
-function remnodelogtime_to_epoch() {
-  temp_date="$( echo $1 | awk -F '.' '{ print $1}' | tr '-' '/' | tr 'T' ' ')"
-  echo $(date "+%s" -d "$temp_date")
-}
+if [ ! -z "$warning_alert_threshold" ]
+then
+  crontab -u root -l | grep -v 'remchain-bp-monitor'  | crontab -u root -
+ (crontab -u root -l ; echo "*/$warning_alert_threshold * * * * $cron_cmd") | crontab -u root -
+fi
 
-#----------------------------------------------------------------------------------------------------#
-# MAIN PART OF THE SCRIPT                                                                            #
-#----------------------------------------------------------------------------------------------------#
+#****************************************************************************************************#
+#                                     MAIN PART OF THE SCRIPT                                        #
+#****************************************************************************************************#
 
 switch=$(cat "$state_file")
 
@@ -233,43 +496,19 @@ echo ""
 
 case "$switch" in
 
-on|On|ON) last_block_date=$(remcli -u https://remchain.remme.io get table rem rem producers -L $accountname -U $accountname | grep 'last_block_time' | awk '{print $2}' | tr -d '"' | tr -d ',')
-          last_block_epoch=$(remnodelogtime_to_epoch "$last_block_date")
-          current_minutes=$(( ($now_epoch - $last_block_epoch) / 60 ))
-          config_minutes_in_seconds=$(( (check_last_block_minutes * 60) - 60 ))
-          if (( ($now_epoch - $last_block_epoch) >= $config_minutes_in_seconds ))
+on|On|ON) if [ "$(echo $check_remcli | tr '[:upper:]' '[:lower:]' )" == "true" ]
           then
-            if [ ! -f "/root/bp_monitor_warning" ]
-            then
-              telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
-              curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
-              echo "1" > "/root/bp_monitor_warning"
-            elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 2) && grep "1" "/root/bp_monitor_warning" ))
-            then
-              telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
-              curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
-              echo "2" > "/root/bp_monitor_warning"
-            elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 3) && grep "2" "/root/bp_monitor_warning" ))
-            then
-              telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
-              curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
-              echo "3" > "/root/bp_monitor_warning" 
-            elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 4) && grep "3" "/root/bp_monitor_warning" ))
-            then
-              telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
-              curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
-              echo "4" > "/root/bp_monitor_warning" 
-            elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 5) && grep "4" "/root/bp_monitor_warning" ))
-            then
-              telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
-              curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
-              echo "5" > "/root/bp_monitor_warning" 
-            elif (( ($now_epoch - $last_block_epoch) >= ($config_minutes_in_seconds x 6) && grep "5" "/root/bp_monitor_warning" ))
-            then
-              telegram_message="$accountname has stopped producing blocks for $current_minutes minutes"
-              curl -s -X POST https://api.telegram.org/bot$telegram_token/sendMessage -d chat_id=$telegram_chatid -d text="$telegram_message" &>/dev/null
-              echo "6" > "/root/bp_monitor_warning"
-            fi
+            check_remcli_response
+          fi
+          if [ "$(echo $check_server | tr '[:upper:]' '[:lower:]' )" == "true" ]
+          then
+            check_ram_and_disk
+          fi
+          if [ "$(echo $check_producer | tr '[:upper:]' '[:lower:]' )" == "true" ]
+          then
+            check_producer_swap
+            check_producer_oracle 
+            check_producer_last_block
           fi
         ;;
 
