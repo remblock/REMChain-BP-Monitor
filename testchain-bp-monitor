@@ -273,7 +273,6 @@ then
 else
   if grep "^set_server_name" "$config_file" > /dev/null 2>&1
   then
-    echo ""
     read -p "ENTER YOUR SERVER NAME?: " -e set_server_name
     sed -i "s/set_server_name=/set_server_name=$set_server_name/g" "$config_file"
   else
