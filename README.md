@@ -1,6 +1,6 @@
 # REMChain-BP-Monitor
 
-#### This script monitors to see whether a producer has produced blocks within a specified period, it can also be used to monitor for any missed swap or oracle actions. Additionally, it can check for a remcli response and check the usage of the server RAM & Disk space. In the event the script detects an issue, a notifcation will be sent via telegram.
+#### This script monitors to see whether a producer has produced blocks within a specified period, it can also be used to monitor for any missed swap or oracle actions. Additionally, it can check for a remcli response and check the usage of the server RAM & Disk space. In the event the script detects an issue, a notification will be sent via telegram.
  
 ***
 
