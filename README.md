@@ -4,10 +4,18 @@
  
 ***
 
-### Setup BP-Monitor:
+### Setup REMChain-BP-Monitor:
 
 ```
 sudo wget https://github.com/remblock/REMChain-BP-Monitor/raw/master/remchain-bp-monitor && sudo chmod u+x remchain-bp-monitor && sudo ./remchain-bp-monitor
+```
+
+***
+
+### Setup Testchain-BP-Monitor:
+
+```
+sudo wget https://github.com/remblock/REMChain-BP-Monitor/raw/master/testchain-bp-monitor && sudo chmod u+x testchain-bp-monitor && sudo ./testchain-bp-monitor
 ```
 
 ***
